@@ -12,11 +12,10 @@ import { NameEntryModal } from "@/components/arena/NameEntryModal";
 import { Matchmaking } from "@/components/arena/Matchmaking";
 import { BattleScene } from "@/components/arena/BattleScene";
 import { BattleResult } from "@/components/arena/BattleResult";
-import { GlobeTransition } from "@/components/arena/GlobeTransition";
 import { useBrowserFingerprint } from "@/hooks/useBrowserFingerprint";
 import { useTheme } from "@/components/ThemeProvider";
 
-type Phase = "name_entry" | "matchmaking" | "globe_transition" | "simulation" | "results";
+type Phase = "name_entry" | "matchmaking" | "simulation" | "results";
 type Difficulty = "easy" | "normal" | "hard" | "hell";
 
 const PREDICTION_COLORS = ["#00e5c7", "#f472b6", "#8b5cf6"];
@@ -30,6 +29,7 @@ function ArenaContent() {
   const [playerId, setPlayerId] = useState<Id<"players"> | null>(null);
   const [battleId, setBattleId] = useState<Id<"battles"> | null>(null);
   const [myPrediction, setMyPrediction] = useState<{ x: number; z: number } | null>(null);
+  const [lockedCity, setLockedCity] = useState<string | null>(null);
 
   const { flash, shake } = useScreenEffects();
 
@@ -57,17 +57,20 @@ function ArenaContent() {
     }
   }, [existingPlayer, playerName]);
 
-  // Transition: matchmaking → globe_transition when match starts simulating
+  // Lock city the moment it first appears — never changes after
+  const cityName = battle?.cityName as string | undefined;
   useEffect(() => {
-    if (!battle) return;
-    if (
-      (battle.status === "simulating" || battle.status === "active") &&
-      phase === "matchmaking"
-    ) {
-      setPhase("globe_transition");
+    if (cityName && !lockedCity) {
+      setLockedCity(cityName);
     }
-    // If battle becomes active while in globe_transition, the globe's onComplete will transition to simulation
-  }, [battle, phase]);
+  }, [cityName, lockedCity]);
+
+  // Only start fly once we have the locked city
+  const opponentFound = !!(
+    lockedCity &&
+    battle &&
+    (battle.status === "simulating" || battle.status === "active" || battle.status === "completed")
+  );
 
   const handleNameSubmit = useCallback(
     async (name: string, diff: Difficulty) => {
@@ -115,6 +118,7 @@ function ArenaContent() {
   const handlePlayAgain = useCallback(() => {
     setBattleId(null);
     setMyPrediction(null);
+    setLockedCity(null);
     setPhase("name_entry");
   }, []);
 
@@ -147,29 +151,21 @@ function ArenaContent() {
     }));
   };
 
-  const handleGlobeComplete = useCallback(() => {
-    // If battle data is ready, go to simulation. Otherwise, wait.
+  const handleFlyComplete = useCallback(() => {
     if (battle?.status === "active") {
       setPhase("simulation");
     } else {
-      // Data not ready yet — poll until it is
-      const check = () => {
-        // The useEffect above will handle the transition once battle becomes active
-        // We just need to set a flag so the next status update triggers simulation
-        setPhase("simulation");
-      };
-      // Small delay to let data arrive
-      setTimeout(check, 500);
+      // Data not ready yet — wait a bit then transition
+      setTimeout(() => setPhase("simulation"), 500);
     }
   }, [battle]);
 
   const sceneConfig = battle?.sceneConfig as any;
   const simulationData = battle?.simulationData as any[];
-  const cityName = battle?.cityName as string | undefined;
   const cityLabel = battle?.cityLabel as string | undefined;
 
-  const showWaveField = phase === "name_entry" || phase === "matchmaking" || phase === "results";
-  const showHeader = phase !== "simulation" && phase !== "globe_transition";
+  const showWaveField = phase === "name_entry" || phase === "results";
+  const showHeader = phase !== "simulation" && phase !== "matchmaking";
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -220,14 +216,11 @@ function ArenaContent() {
           )}
 
           {phase === "matchmaking" && (
-            <Matchmaking key="matchmaking" showGlobe />
-          )}
-
-          {phase === "globe_transition" && (
-            <GlobeTransition
-              key="globe"
-              selectedCity={cityName ?? "New York"}
-              onComplete={handleGlobeComplete}
+            <Matchmaking
+              key="matchmaking"
+              opponentFound={opponentFound}
+              selectedCity={lockedCity ?? "New York"}
+              onFlyComplete={handleFlyComplete}
             />
           )}
 
@@ -251,7 +244,7 @@ function ArenaContent() {
                 onSimulationComplete={handleSimulationComplete}
                 predictions={buildPredictionMarkers()}
                 showAccident={battle.status === "completed"}
-                cityName={cityName}
+                cityName={lockedCity ?? undefined}
                 cityLabel={cityLabel}
               />
             </motion.div>
