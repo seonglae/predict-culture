@@ -96,7 +96,13 @@ export function WaveField() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const themeRef = useRef(isDark);
-  themeRef.current = isDark;
+  const flushRef = useRef(false);
+
+  // Detect theme change → schedule immediate background flush
+  if (themeRef.current !== isDark) {
+    themeRef.current = isDark;
+    flushRef.current = true;
+  }
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -176,9 +182,16 @@ export function WaveField() {
     const animate = () => {
       time++;
       const t = time * TIME_SCALE;
-
-      // Fade trail — adaptive to theme
       const dark = themeRef.current;
+
+      // Instant background flush on theme change
+      if (flushRef.current) {
+        flushRef.current = false;
+        ctx.fillStyle = dark ? "#06060c" : "#f8f7f4";
+        ctx.fillRect(0, 0, width, height);
+      }
+
+      // Fade trail
       ctx.fillStyle = dark ? "rgba(6, 6, 12, 0.045)" : "rgba(248, 247, 244, 0.08)";
       ctx.fillRect(0, 0, width, height);
 
