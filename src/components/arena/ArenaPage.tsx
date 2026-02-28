@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
@@ -29,7 +29,7 @@ function ArenaContent() {
   const [playerId, setPlayerId] = useState<Id<"players"> | null>(null);
   const [battleId, setBattleId] = useState<Id<"battles"> | null>(null);
   const [myPrediction, setMyPrediction] = useState<{ x: number; z: number } | null>(null);
-  const [lockedCity, setLockedCity] = useState<string | null>(null);
+  const cityRef = useRef<string | null>(null);
 
   const { flash, shake } = useScreenEffects();
 
@@ -57,17 +57,15 @@ function ArenaContent() {
     }
   }, [existingPlayer, playerName]);
 
-  // Lock city the moment it first appears — never changes after
-  const cityName = battle?.cityName as string | undefined;
-  useEffect(() => {
-    if (cityName && !lockedCity) {
-      setLockedCity(cityName);
-    }
-  }, [cityName, lockedCity]);
+  // Lock city synchronously on first read — ref, not state, no async delay
+  const rawCityName = battle?.cityName as string | undefined;
+  if (rawCityName && !cityRef.current) {
+    cityRef.current = rawCityName;
+  }
+  const city = cityRef.current;
 
-  // Only start fly once we have the locked city
   const opponentFound = !!(
-    lockedCity &&
+    city &&
     battle &&
     (battle.status === "simulating" || battle.status === "active" || battle.status === "completed")
   );
@@ -118,7 +116,7 @@ function ArenaContent() {
   const handlePlayAgain = useCallback(() => {
     setBattleId(null);
     setMyPrediction(null);
-    setLockedCity(null);
+    cityRef.current = null;
     setPhase("name_entry");
   }, []);
 
@@ -219,7 +217,7 @@ function ArenaContent() {
             <Matchmaking
               key="matchmaking"
               opponentFound={opponentFound}
-              selectedCity={lockedCity ?? "New York"}
+              selectedCity={city ?? "New York"}
               onFlyComplete={handleFlyComplete}
             />
           )}
@@ -244,7 +242,7 @@ function ArenaContent() {
                 onSimulationComplete={handleSimulationComplete}
                 predictions={buildPredictionMarkers()}
                 showAccident={battle.status === "completed"}
-                cityName={lockedCity ?? undefined}
+                cityName={city ?? undefined}
                 cityLabel={cityLabel}
               />
             </motion.div>
