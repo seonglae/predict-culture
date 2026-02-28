@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useMemo, useEffect, useState } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { useRef, useMemo } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { motion } from "framer-motion";
 import { GeoGlobe } from "./GeoGlobe";
@@ -21,11 +21,22 @@ interface GlobeTransitionProps {
   onComplete: () => void;
 }
 
-/** Just spins, then calls onComplete after a short duration */
-function SpinningGlobeScene({ selectedCity, onComplete }: GlobeTransitionProps) {
+function ZoomGlobeScene({ selectedCity, onComplete }: GlobeTransitionProps) {
   const groupRef = useRef<THREE.Group>(null);
   const elapsedRef = useRef(0);
   const completedRef = useRef(false);
+  const { camera } = useThree();
+
+  const targetCity = useMemo(
+    () => CITIES.find((c) => c.name === selectedCity) ?? CITIES[0],
+    [selectedCity]
+  );
+
+  // Orient globe so the selected city faces camera on mount
+  const initialRotationY = useMemo(() => {
+    const theta = (targetCity.lon + 180) * (Math.PI / 180);
+    return -theta + Math.PI;
+  }, [targetCity]);
 
   const cityMarkers = useMemo(
     () =>
@@ -40,12 +51,27 @@ function SpinningGlobeScene({ selectedCity, onComplete }: GlobeTransitionProps) 
   useFrame((_, delta) => {
     if (!groupRef.current) return;
     elapsedRef.current += delta;
+    const t = elapsedRef.current;
 
-    // Just spin continuously
-    groupRef.current.rotation.y += delta * 0.5;
+    // Set initial rotation to face city
+    if (t < 0.05) {
+      groupRef.current.rotation.y = initialRotationY;
+    }
 
-    // After 3 seconds, transition out
-    if (elapsedRef.current > 3 && !completedRef.current) {
+    // 0-2.5s: zoom camera toward the globe surface
+    const zoomDuration = 2.5;
+    if (t < zoomDuration) {
+      const progress = t / zoomDuration;
+      // Ease out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      camera.position.z = 5 - eased * 4.2;
+      // Slight upward tilt based on city latitude
+      const latRad = targetCity.lat * (Math.PI / 180);
+      camera.position.y = eased * Math.sin(latRad) * 0.8;
+    }
+
+    // Done
+    if (t > zoomDuration + 0.3 && !completedRef.current) {
       completedRef.current = true;
       onComplete();
     }
@@ -79,10 +105,10 @@ export function GlobeTransition({ selectedCity, onComplete }: GlobeTransitionPro
         camera={{ position: [0, 0, 5], fov: 45 }}
         style={{ position: "absolute", inset: 0 }}
       >
-        <SpinningGlobeScene selectedCity={selectedCity} onComplete={onComplete} />
+        <ZoomGlobeScene selectedCity={selectedCity} onComplete={onComplete} />
       </Canvas>
 
-      {/* City name — shown immediately */}
+      {/* City name */}
       {cityInfo && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
