@@ -45,48 +45,54 @@ export function Matchmaking({ onTimeout, opponentFound, opponentName, showGlobe 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#030308]"
+      className="fixed inset-0 z-50 bg-[#030308]"
     >
-      {/* Globe — centered, sized to fit */}
+      {/* Globe — full screen canvas, globe centered */}
       {showGlobe && (
-        <div className="w-52 h-52 mb-6">
-          <Canvas camera={{ position: [0, 0, 3.2], fov: 45 }}>
-            <GeoGlobe radius={1.3} spinSpeed={0.3} cities={CITY_COORDS} />
-          </Canvas>
-        </div>
+        <Canvas
+          camera={{ position: [0, 0, 3.2], fov: 45 }}
+          style={{ position: "absolute", inset: 0 }}
+        >
+          <GeoGlobe radius={1.4} spinSpeed={0.3} cities={CITY_COORDS} />
+        </Canvas>
       )}
 
       {/* Radar pulse fallback when no globe */}
       {!showGlobe && (
-        <div className="relative w-40 h-40 mb-8">
-          {[0, 1, 2].map((i) => (
-            <motion.div
-              key={i}
-              className="absolute inset-0 rounded-full border-2 border-[#00e5c7]"
-              initial={{ scale: 0.3, opacity: 1 }}
-              animate={{ scale: 2, opacity: 0 }}
-              transition={{ duration: 2, repeat: Infinity, delay: i * 0.6, ease: "easeOut" }}
-            />
-          ))}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-4 h-4 rounded-full bg-[#00e5c7]" />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="relative w-40 h-40">
+            {[0, 1, 2].map((i) => (
+              <motion.div
+                key={i}
+                className="absolute inset-0 rounded-full border-2 border-[#00e5c7]"
+                initial={{ scale: 0.3, opacity: 1 }}
+                animate={{ scale: 2, opacity: 0 }}
+                transition={{ duration: 2, repeat: Infinity, delay: i * 0.6, ease: "easeOut" }}
+              />
+            ))}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-4 h-4 rounded-full bg-[#00e5c7]" />
+            </div>
           </div>
         </div>
       )}
 
-      {opponentFound ? (
-        <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center">
-          <p className="text-2xl font-bold text-[#00e5c7] mb-2">Opponent Found!</p>
-          <p className="text-lg text-white/70">{opponentName}</p>
-        </motion.div>
-      ) : (
-        <div className="text-center">
-          <p className="text-lg text-white/60 mb-2 font-mono">Finding opponent...</p>
-          <p className="text-white/25 text-xs font-mono">
-            {countdown > 0 ? `${countdown}s` : "Starting with AI..."}
-          </p>
-        </div>
-      )}
+      {/* Text overlay — bottom center */}
+      <div className="absolute inset-x-0 bottom-16 z-10 pointer-events-none">
+        {opponentFound ? (
+          <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center">
+            <p className="text-2xl font-bold text-[#00e5c7] mb-2">Opponent Found!</p>
+            <p className="text-lg text-white/70">{opponentName}</p>
+          </motion.div>
+        ) : (
+          <div className="text-center">
+            <p className="text-lg text-white/60 mb-2 font-mono">Finding opponent...</p>
+            <p className="text-white/25 text-xs font-mono">
+              {countdown > 0 ? `${countdown}s` : "Starting with AI..."}
+            </p>
+          </div>
+        )}
+      </div>
     </motion.div>
   );
 }
