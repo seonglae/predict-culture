@@ -169,13 +169,14 @@ function ArenaContent() {
   const cityLabel = battle?.cityLabel as string | undefined;
 
   const showWaveField = phase === "name_entry" || phase === "matchmaking" || phase === "results";
+  const showHeader = phase !== "simulation" && phase !== "globe_transition";
 
   return (
     <div className="min-h-screen flex flex-col">
       {showWaveField && <WaveField />}
-      <Header />
+      {showHeader && <Header />}
 
-      <main className="flex-1 pt-16 relative z-10">
+      <main className={`flex-1 relative z-10 ${showHeader ? "pt-16" : ""}`}>
         <AnimatePresence mode="wait">
           {phase === "name_entry" && (
             <div
@@ -235,7 +236,7 @@ function ArenaContent() {
               key="simulation"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="w-full h-[calc(100vh-4rem)]"
+              className="w-full h-screen"
             >
               <BattleScene
                 tiles={sceneConfig.tiles}
