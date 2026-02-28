@@ -43,6 +43,7 @@ export default defineSchema({
     simulationSpeed: v.number(),
     totalFrames: v.optional(v.number()),
     cityName: v.optional(v.string()),
+    cityLabel: v.optional(v.string()),
     createdAt: v.number(),
   })
     .index("by_status", ["status"])

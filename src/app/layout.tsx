@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Inter, Staatliches } from "next/font/google";
+import { Inter } from "next/font/google";
+import localFont from "next/font/local";
 import { ConvexClientProvider } from "./ConvexClientProvider";
 import ThemeProvider from "@/components/ThemeProvider";
 import "./globals.css";
@@ -9,18 +10,18 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
-const staatliches = Staatliches({
-  subsets: ["latin"],
+const nasalization = localFont({
+  src: "../../public/fonts/nasalization-rg.otf",
   variable: "--font-display",
-  weight: "400",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "SentinelDrive",
+  title: "PredictDrive",
   description:
     "Observe traffic. Predict collisions. Beat the AI. A competitive 3D prediction arena.",
   openGraph: {
-    title: "SentinelDrive",
+    title: "PredictDrive",
     description: "Observe. Predict. Collapse.",
   },
 };
@@ -40,7 +41,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`${inter.variable} ${staatliches.variable} font-sans antialiased bg-background text-foreground`}>
+      <body className={`${inter.variable} ${nasalization.variable} font-sans antialiased bg-background text-foreground`}>
         <ThemeProvider>
           <ConvexClientProvider>{children}</ConvexClientProvider>
         </ThemeProvider>

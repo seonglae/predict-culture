@@ -8,9 +8,11 @@
  * @module
  */
 
+import type * as actions_fetchOSM from "../actions/fetchOSM.js";
 import type * as actions_mistralAgent from "../actions/mistralAgent.js";
 import type * as battles from "../battles.js";
 import type * as leaderboard from "../leaderboard.js";
+import type * as lib_cityData from "../lib/cityData.js";
 import type * as lib_elo from "../lib/elo.js";
 import type * as lib_mapGenerator from "../lib/mapGenerator.js";
 import type * as lib_rateLimits from "../lib/rateLimits.js";
@@ -27,9 +29,11 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "actions/fetchOSM": typeof actions_fetchOSM;
   "actions/mistralAgent": typeof actions_mistralAgent;
   battles: typeof battles;
   leaderboard: typeof leaderboard;
+  "lib/cityData": typeof lib_cityData;
   "lib/elo": typeof lib_elo;
   "lib/mapGenerator": typeof lib_mapGenerator;
   "lib/rateLimits": typeof lib_rateLimits;
