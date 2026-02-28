@@ -101,7 +101,6 @@ function FlyToScene({ selectedCity, onComplete }: GlobeTransitionProps) {
     <GeoGlobe
       radius={GLOBE_RADIUS}
       spinSpeed={0}
-      cities={cityMarkers}
     />
   );
 }

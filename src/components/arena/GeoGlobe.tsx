@@ -5,14 +5,11 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import * as topojson from "topojson-client";
 import type { Topology, GeometryCollection } from "topojson-specification";
+import earcut from "earcut";
 
 interface GeoGlobeProps {
   radius?: number;
-  /** Spin speed (radians/sec). Set 0 to stop. */
   spinSpeed?: number;
-  /** City lat/lon markers */
-  cities?: { lat: number; lon: number; selected?: boolean }[];
-  /** External ref to control rotation */
   groupRef?: React.RefObject<THREE.Group | null>;
 }
 
@@ -26,7 +23,73 @@ function latLonToVec3(lat: number, lon: number, r: number): THREE.Vector3 {
   );
 }
 
-/** Convert GeoJSON MultiPolygon/Polygon rings into line segments on sphere */
+/** Convert GeoJSON polygons to filled triangulated mesh on sphere */
+function geoToFillGeometry(
+  geoFeatures: GeoJSON.Feature[],
+  radius: number
+): THREE.BufferGeometry {
+  const positions: number[] = [];
+  const normals: number[] = [];
+
+  for (const feature of geoFeatures) {
+    const geom = feature.geometry;
+    let polygons: number[][][][] = [];
+
+    if (geom.type === "Polygon") {
+      polygons = [geom.coordinates];
+    } else if (geom.type === "MultiPolygon") {
+      polygons = geom.coordinates;
+    }
+
+    for (const polygon of polygons) {
+      const outerRing = polygon[0];
+      const holes = polygon.slice(1);
+
+      const coords: number[] = [];
+      const holeIndices: number[] = [];
+
+      const outerLen =
+        outerRing[0][0] === outerRing[outerRing.length - 1][0] &&
+        outerRing[0][1] === outerRing[outerRing.length - 1][1]
+          ? outerRing.length - 1
+          : outerRing.length;
+
+      for (let i = 0; i < outerLen; i++) {
+        coords.push(outerRing[i][0], outerRing[i][1]);
+      }
+
+      for (const hole of holes) {
+        holeIndices.push(coords.length / 2);
+        const holeLen =
+          hole[0][0] === hole[hole.length - 1][0] &&
+          hole[0][1] === hole[hole.length - 1][1]
+            ? hole.length - 1
+            : hole.length;
+        for (let i = 0; i < holeLen; i++) {
+          coords.push(hole[i][0], hole[i][1]);
+        }
+      }
+
+      const indices = earcut(coords, holeIndices.length > 0 ? holeIndices : undefined, 2);
+
+      for (const idx of indices) {
+        const lon = coords[idx * 2];
+        const lat = coords[idx * 2 + 1];
+        const v = latLonToVec3(lat, lon, radius);
+        const n = v.clone().normalize();
+        positions.push(v.x, v.y, v.z);
+        normals.push(n.x, n.y, n.z);
+      }
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
+  return geometry;
+}
+
+/** Convert GeoJSON polygons into border line segments on sphere */
 function geoToLineGeometry(
   geoFeatures: GeoJSON.Feature[],
   radius: number
@@ -57,67 +120,40 @@ function geoToLineGeometry(
   }
 
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute(
-    "position",
-    new THREE.Float32BufferAttribute(points, 3)
-  );
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
   return geometry;
 }
 
-/** Latitude/longitude grid lines */
-function createGridGeometry(radius: number): THREE.BufferGeometry {
-  const points: number[] = [];
-  const step = 30; // degrees between grid lines
-  const segments = 72;
-
-  // Latitude lines
-  for (let lat = -60; lat <= 60; lat += step) {
-    for (let i = 0; i < segments; i++) {
-      const lon1 = (i / segments) * 360 - 180;
-      const lon2 = ((i + 1) / segments) * 360 - 180;
-      const v1 = latLonToVec3(lat, lon1, radius);
-      const v2 = latLonToVec3(lat, lon2, radius);
-      points.push(v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
-    }
-  }
-
-  // Longitude lines
-  for (let lon = -180; lon < 180; lon += step) {
-    for (let i = 0; i < segments; i++) {
-      const lat1 = (i / segments) * 180 - 90;
-      const lat2 = ((i + 1) / segments) * 180 - 90;
-      const v1 = latLonToVec3(lat1, lon, radius);
-      const v2 = latLonToVec3(lat2, lon, radius);
-      points.push(v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
-    }
-  }
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute(
-    "position",
-    new THREE.Float32BufferAttribute(points, 3)
-  );
-  return geometry;
-}
 
 export function GeoGlobe({
   radius = 1.5,
   spinSpeed = 0.3,
-  cities = [],
   groupRef: externalRef,
 }: GeoGlobeProps) {
   const internalRef = useRef<THREE.Group>(null);
   const ref = externalRef ?? internalRef;
-  const [borderGeom, setBorderGeom] = useState<THREE.BufferGeometry | null>(
-    null
-  );
+  const [landFillGeom, setLandFillGeom] = useState<THREE.BufferGeometry | null>(null);
+  const [borderGeom, setBorderGeom] = useState<THREE.BufferGeometry | null>(null);
+  const [urbanFillGeom, setUrbanFillGeom] = useState<THREE.BufferGeometry | null>(null);
 
-  const gridGeom = useMemo(() => createGridGeometry(radius + 0.002), [radius]);
-
-  // Load TopoJSON and convert to line geometry
   useEffect(() => {
     let cancelled = false;
-    fetch("/geo/countries-110m.json")
+
+    // Filled land masses
+    fetch("/geo/land-50m.json")
+      .then((r) => r.json())
+      .then((topo: Topology) => {
+        if (cancelled) return;
+        const land = topojson.feature(topo, topo.objects.land as GeometryCollection);
+        const geom = geoToFillGeometry(
+          (land as GeoJSON.FeatureCollection).features,
+          radius + 0.001
+        );
+        setLandFillGeom(geom);
+      });
+
+    // Country border lines
+    fetch("/geo/countries-50m.json")
       .then((r) => r.json())
       .then((topo: Topology) => {
         if (cancelled) return;
@@ -131,6 +167,16 @@ export function GeoGlobe({
         );
         setBorderGeom(geom);
       });
+
+    // Urban area fills for 7 cities
+    fetch("/geo/urban-areas.json")
+      .then((r) => r.json())
+      .then((fc: GeoJSON.FeatureCollection) => {
+        if (cancelled) return;
+        const geom = geoToFillGeometry(fc.features, radius + 0.004);
+        setUrbanFillGeom(geom);
+      });
+
     return () => {
       cancelled = true;
     };
@@ -142,56 +188,56 @@ export function GeoGlobe({
     }
   });
 
-  const cityPositions = useMemo(
-    () =>
-      cities.map((c) => ({
-        pos: latLonToVec3(c.lat, c.lon, radius + 0.015),
-        selected: c.selected ?? false,
-      })),
-    [cities, radius]
-  );
-
   return (
     <group ref={ref}>
-      {/* Ocean sphere */}
+      {/* Ocean sphere — dark, no grid */}
       <mesh>
         <sphereGeometry args={[radius, 64, 64]} />
-        <meshBasicMaterial color="#060d1a" />
+        <meshBasicMaterial color="#020810" />
       </mesh>
+
+      {/* Filled land masses */}
+      {landFillGeom && (
+        <mesh geometry={landFillGeom}>
+          <meshBasicMaterial
+            color="#0a1a28"
+            transparent
+            opacity={0.95}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      )}
+
+      {/* City urban areas */}
+      {urbanFillGeom && (
+        <mesh geometry={urbanFillGeom}>
+          <meshBasicMaterial
+            color="#00e5c7"
+            transparent
+            opacity={0.35}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      )}
 
       {/* Country borders */}
       {borderGeom && (
         <lineSegments geometry={borderGeom}>
-          <lineBasicMaterial color="#00c9b0" transparent opacity={0.35} />
+          <lineBasicMaterial color="#00c9b0" transparent opacity={0.2} />
         </lineSegments>
       )}
 
-      {/* Grid lines */}
-      <lineSegments geometry={gridGeom}>
-        <lineBasicMaterial color="#1a3a4a" transparent opacity={0.2} />
-      </lineSegments>
-
       {/* Atmosphere glow */}
       <mesh>
-        <sphereGeometry args={[radius * 1.04, 48, 48]} />
+        <sphereGeometry args={[radius * 1.025, 48, 48]} />
         <meshBasicMaterial
-          color="#0088cc"
+          color="#0077aa"
           transparent
           opacity={0.05}
           side={THREE.BackSide}
         />
       </mesh>
 
-      {/* City dots */}
-      {cityPositions.map((c, i) => (
-        <mesh key={i} position={c.pos}>
-          <sphereGeometry args={[c.selected ? 0.03 : 0.02, 8, 8]} />
-          <meshBasicMaterial
-            color={c.selected ? "#00e5c7" : "#4a9eff"}
-            toneMapped={false}
-          />
-        </mesh>
-      ))}
     </group>
   );
 }
