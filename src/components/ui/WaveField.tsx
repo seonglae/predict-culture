@@ -204,7 +204,7 @@ export function WaveField() {
         }
 
         // Flow field from noise
-        const layerSpeed = p.layer === 0 ? 0.4 : p.layer === 1 ? 0.8 : 1.3;
+        const layerSpeed = p.layer === 0 ? 0.6 : p.layer === 1 ? 1.1 : 1.8;
         const scale = p.layer === 0 ? FLOW_SCALE * 0.6 : p.layer === 1 ? FLOW_SCALE : FLOW_SCALE_2;
 
         const n1 = noise1.fbm(p.x * scale, p.y * scale + t, 3);
