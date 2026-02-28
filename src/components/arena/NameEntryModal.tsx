@@ -10,10 +10,9 @@ interface NameEntryModalProps {
 }
 
 const DIFFICULTIES: { value: Difficulty; label: string; desc: string; color: string }[] = [
-  { value: "easy", label: "I", desc: "6x6", color: "var(--accent-teal)" },
-  { value: "normal", label: "II", desc: "8x8", color: "var(--accent-purple)" },
-  { value: "hard", label: "III", desc: "12x12", color: "var(--accent-pink)" },
-  { value: "hell", label: "IV", desc: "16x16", color: "var(--danger)" },
+  { value: "normal", label: "I", desc: "8x8", color: "var(--accent-teal)" },
+  { value: "hard", label: "II", desc: "12x12", color: "var(--accent-pink)" },
+  { value: "hell", label: "III", desc: "16x16", color: "var(--danger)" },
 ];
 
 export function NameEntryModal({ onSubmit, initialName = "" }: NameEntryModalProps) {
@@ -56,7 +55,7 @@ export function NameEntryModal({ onSubmit, initialName = "" }: NameEntryModalPro
               <label className="block text-[10px] font-mono mb-1.5 text-foreground/30 uppercase tracking-[0.2em]">
                 Complexity
               </label>
-              <div className="grid grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-3 gap-1.5">
                 {DIFFICULTIES.map((d) => {
                   const isActive = difficulty === d.value;
                   return (
