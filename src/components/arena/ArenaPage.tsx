@@ -168,10 +168,13 @@ function ArenaContent() {
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
                 >
-                  <h1 className="text-[72px] md:text-[120px] lg:text-[150px] font-black leading-[0.85] tracking-[-0.04em] text-foreground/90 select-none" style={{ fontFamily: "var(--font-syne), sans-serif" }}>
+                  <h1
+                    className="text-[72px] md:text-[120px] lg:text-[150px] leading-[0.85] tracking-[0.02em] text-foreground/90 select-none"
+                    style={{ fontFamily: "var(--font-display), sans-serif" }}
+                  >
                     SENTINEL
                     <br />
-                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent-teal via-accent-purple to-accent-pink">
+                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent-teal to-accent-pink">
                       DRIVE
                     </span>
                   </h1>
@@ -181,7 +184,7 @@ function ArenaContent() {
                   initial={{ y: 15, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ delay: 0.4, duration: 0.6 }}
-                  className="text-[13px] text-foreground/25 tracking-[0.35em] uppercase mt-6 font-mono"
+                  className="text-[13px] text-foreground/30 tracking-[0.35em] uppercase mt-6 font-mono"
                 >
                   observe &middot; predict &middot; collapse
                 </motion.p>

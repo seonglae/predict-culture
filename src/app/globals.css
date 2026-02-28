@@ -7,9 +7,9 @@
 :root {
   --background: #f8f7f4;
   --foreground: #1a1a1a;
-  --accent-teal: #00b894;
-  --accent-purple: #6c5ce7;
-  --accent-pink: #e84393;
+  --accent-teal: #00a884;
+  --accent-purple: #2d6a4f;
+  --accent-pink: #d63384;
   --accent-orange: #e17055;
   --muted: #8b8680;
   --border: #e0dcd6;
@@ -24,7 +24,7 @@
   --background: #06060c;
   --foreground: #e8e8ed;
   --accent-teal: #00e5c7;
-  --accent-purple: #8b5cf6;
+  --accent-purple: #34d399;
   --accent-pink: #f472b6;
   --accent-orange: #ff6b35;
   --muted: #6b6b80;
