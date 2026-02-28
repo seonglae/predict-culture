@@ -204,39 +204,16 @@ function ArenaContent() {
                       cursor: default;
                     }
 
-                    /* Default: calm glaze shimmer */
+                    /* Default: plain text, no glaze */
                     .chaos-letter {
                       display: inline-block;
-                      background-image: linear-gradient(
-                        90deg,
-                        #1a1a1a, #1a1a1a, #6a6a6a, #999,
-                        #6a6a6a, #1a1a1a, #1a1a1a, #1a1a1a
-                      );
-                      background-size: 300% 100%;
+                      background-image: none;
                       -webkit-background-clip: text;
-                      -webkit-text-fill-color: transparent;
-                      animation: hero-shimmer 8s linear infinite;
+                      -webkit-text-fill-color: currentColor;
+                      animation: none;
                       transition: filter 0.3s ease;
                       filter: none;
                       will-change: transform, filter, background-image;
-                    }
-                    :global(.dark) .chaos-letter {
-                      background-image: linear-gradient(
-                        90deg,
-                        #e0eef4, #e0eef4, #d0e8f0, #e8d8f4,
-                        #d0e8f0, #e0eef4, #e8d8f4, #e0eef4
-                      );
-                    }
-                    @keyframes hero-shimmer {
-                      0% { background-position: 300% 0; }
-                      100% { background-position: -300% 0; }
-                    }
-
-                    /* CHAOS: no glaze by default, just foreground color */
-                    .chaos-only .chaos-letter {
-                      background-image: none;
-                      -webkit-text-fill-color: currentColor;
-                      animation: none;
                     }
 
                     /* Hover: full chaos mode */
