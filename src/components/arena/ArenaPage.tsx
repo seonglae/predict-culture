@@ -1,0 +1,251 @@
+"use client";
+
+import { useState, useCallback, useEffect } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { AnimatePresence, motion } from "framer-motion";
+import { Header } from "@/components/ui/Header";
+import { WaveField } from "@/components/ui/WaveField";
+import { ScreenEffectsProvider, useScreenEffects } from "@/components/arena/ScreenEffects";
+import { NameEntryModal } from "@/components/arena/NameEntryModal";
+import { Matchmaking } from "@/components/arena/Matchmaking";
+import { BattleScene } from "@/components/arena/BattleScene";
+import { BattleResult } from "@/components/arena/BattleResult";
+import { useBrowserFingerprint } from "@/hooks/useBrowserFingerprint";
+import { useTheme } from "@/components/ThemeProvider";
+
+type Phase = "name_entry" | "matchmaking" | "simulation" | "results";
+type Difficulty = "easy" | "normal" | "hard" | "hell";
+
+const PREDICTION_COLORS = ["#00e5c7", "#f472b6", "#8b5cf6"];
+
+function ArenaContent() {
+  const fingerprint = useBrowserFingerprint();
+
+  const [phase, setPhase] = useState<Phase>("name_entry");
+  const [playerName, setPlayerName] = useState("");
+  const [difficulty, setDifficulty] = useState<Difficulty>("normal");
+  const [playerId, setPlayerId] = useState<Id<"players"> | null>(null);
+  const [battleId, setBattleId] = useState<Id<"battles"> | null>(null);
+  const [myPrediction, setMyPrediction] = useState<{ x: number; z: number } | null>(null);
+
+  const { flash, shake } = useScreenEffects();
+
+  const registerOrGet = useMutation(api.players.registerOrGet);
+  const createBattle = useMutation(api.battles.createBattle);
+  const submitPrediction = useMutation(api.predictions.submitPrediction);
+  const completeBattle = useMutation(api.battles.completeBattle);
+
+  const battle = useQuery(
+    api.battles.getBattle,
+    battleId ? { battleId } : "skip"
+  );
+  const predictions = useQuery(
+    api.predictions.getPredictions,
+    battleId ? { battleId } : "skip"
+  );
+  const existingPlayer = useQuery(
+    api.players.getByBrowserId,
+    fingerprint ? { browserId: fingerprint } : "skip"
+  );
+
+  useEffect(() => {
+    if (existingPlayer && !playerName) {
+      setPlayerName(existingPlayer.name);
+    }
+  }, [existingPlayer, playerName]);
+
+  useEffect(() => {
+    if (!battle) return;
+    if (battle.status === "active" && phase === "matchmaking") {
+      setPhase("simulation");
+    }
+  }, [battle, phase]);
+
+  const handleNameSubmit = useCallback(
+    async (name: string, diff: Difficulty) => {
+      if (!fingerprint) return;
+
+      setPlayerName(name);
+      setDifficulty(diff);
+
+      const pid = await registerOrGet({ name, browserId: fingerprint });
+      setPlayerId(pid);
+
+      const bid = await createBattle({ playerId: pid, difficulty: diff });
+      setBattleId(bid);
+
+      setPhase("matchmaking");
+    },
+    [fingerprint, registerOrGet, createBattle]
+  );
+
+  const handlePrediction = useCallback(
+    async (point: { x: number; z: number }, time: number) => {
+      if (!battleId || !playerId) return;
+      setMyPrediction(point);
+      await submitPrediction({
+        battleId,
+        playerId,
+        coordinates: point,
+        predictionTime: time,
+      });
+    },
+    [battleId, playerId, submitPrediction]
+  );
+
+  const handleSimulationComplete = useCallback(async () => {
+    if (!battleId) return;
+    flash(200);
+    shake(12, 600);
+
+    setTimeout(async () => {
+      await completeBattle({ battleId });
+      setPhase("results");
+    }, 1500);
+  }, [battleId, completeBattle, flash, shake]);
+
+  const handlePlayAgain = useCallback(() => {
+    setBattleId(null);
+    setMyPrediction(null);
+    setPhase("name_entry");
+  }, []);
+
+  const buildResults = () => {
+    if (!battle || !predictions || battle.status !== "completed") return [];
+
+    return battle.playerIds.map((pid: Id<"players">, i: number) => {
+      const pred = predictions.find((p: any) => p.playerId === pid);
+      return {
+        name: pid === playerId ? playerName : `Player ${i + 1}`,
+        score: pred?.score ?? 0,
+        distanceScore: pred?.distanceScore ?? 0,
+        timingScore: pred?.timingScore ?? 0,
+        eloChange: 0,
+        elo: 1500,
+        isAI: false,
+        isYou: pid === playerId,
+        placement: i,
+      };
+    });
+  };
+
+  const buildPredictionMarkers = () => {
+    if (!predictions) return [];
+    return predictions.map((p: any, i: number) => ({
+      x: p.coordinates.x,
+      z: p.coordinates.z,
+      color: PREDICTION_COLORS[i % PREDICTION_COLORS.length],
+      label: p.playerId === playerId ? "You" : `P${i + 1}`,
+    }));
+  };
+
+  const sceneConfig = battle?.sceneConfig as any;
+  const simulationData = battle?.simulationData as any[];
+
+  const showWaveField = phase === "name_entry" || phase === "matchmaking" || phase === "results";
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      {showWaveField && <WaveField />}
+      <Header />
+
+      <main className="flex-1 pt-16">
+        <AnimatePresence mode="wait">
+          {phase === "name_entry" && (
+            <motion.div
+              key="name-entry"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex-1 flex flex-col items-center justify-center min-h-[calc(100vh-4rem)]"
+            >
+              {/* Hero */}
+              <div className="text-center mb-12 px-4">
+                <motion.div
+                  initial={{ y: -30, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                >
+                  <h1 className="text-[72px] md:text-[120px] lg:text-[150px] font-black leading-[0.85] tracking-[-0.05em] text-foreground/90 select-none">
+                    SENTINEL
+                    <br />
+                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent-teal via-accent-purple to-accent-pink">
+                      DRIVE
+                    </span>
+                  </h1>
+                </motion.div>
+
+                <motion.p
+                  initial={{ y: 15, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.4, duration: 0.6 }}
+                  className="text-[13px] text-foreground/25 tracking-[0.35em] uppercase mt-6 font-mono"
+                >
+                  observe &middot; predict &middot; collapse
+                </motion.p>
+              </div>
+
+              {/* Entry form */}
+              <motion.div
+                initial={{ y: 40, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.6, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+              >
+                <NameEntryModal
+                  onSubmit={handleNameSubmit}
+                  initialName={existingPlayer?.name ?? ""}
+                />
+              </motion.div>
+            </motion.div>
+          )}
+
+          {phase === "matchmaking" && (
+            <Matchmaking key="matchmaking" />
+          )}
+
+          {phase === "simulation" && sceneConfig && simulationData && battle && (
+            <motion.div
+              key="simulation"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="w-full h-[calc(100vh-4rem)]"
+            >
+              <BattleScene
+                tiles={sceneConfig.tiles}
+                gridSize={sceneConfig.gridSize}
+                tileSize={sceneConfig.tileSize}
+                vehicles={sceneConfig.vehicles}
+                frames={simulationData}
+                accidentTime={battle.accidentTime ?? 10}
+                accidentFrame={battle.accidentFrame ?? 0}
+                accidentPoint={battle.accidentPoint ?? { x: 0, z: 0 }}
+                onPrediction={handlePrediction}
+                onSimulationComplete={handleSimulationComplete}
+                predictions={buildPredictionMarkers()}
+                showAccident={battle.status === "completed"}
+              />
+            </motion.div>
+          )}
+
+          {phase === "results" && (
+            <BattleResult
+              key="results"
+              results={buildResults()}
+              onPlayAgain={handlePlayAgain}
+            />
+          )}
+        </AnimatePresence>
+      </main>
+    </div>
+  );
+}
+
+export default function ArenaPage() {
+  return (
+    <ScreenEffectsProvider>
+      <ArenaContent />
+    </ScreenEffectsProvider>
+  );
+}
