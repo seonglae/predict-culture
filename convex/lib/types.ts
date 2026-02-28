@@ -17,6 +17,9 @@ export type TileType =
   | "building_medium"
   | "building_tall"
   | "park"
+  | "water"
+  | "river"
+  | "forest"
   | "empty";
 
 export interface Tile {
@@ -65,6 +68,8 @@ export interface SceneConfig {
   tiles: Tile[];
   vehicles: VehicleSpawn[];
   mapRadius: number;
+  cityName?: string;
+  cityLabel?: string;
 }
 
 export interface SimulationResult {
@@ -91,32 +96,32 @@ export const DIFFICULTY_CONFIG: Record<
   hell: { gridSize: 16, vehicleRange: [25, 35], aiToolCalls: 8, droneCount: 4, helicopterCount: 2 },
 };
 
-// Modern building colors — less saccharine, more architectural
+// Vibrant pastel building colors — bright, cute, modern
 export const BUILDING_COLORS = [
-  "#e8b4b8", // dusty rose
-  "#92b4c8", // steel blue
-  "#b8a9c9", // muted lavender
-  "#d4a574", // terracotta
-  "#a3c4a8", // sage
-  "#c9b896", // sandstone
-  "#d1848f", // mauve
-  "#8ba4b8", // slate
-  "#c8c3b8", // warm gray
-  "#b4ccc4", // seafoam
+  "#ffb3c6", // hot pink pastel
+  "#a2d2ff", // bright sky blue
+  "#cdb4db", // vivid lilac
+  "#ffd6a5", // warm peach
+  "#caffbf", // bright mint
+  "#bde0fe", // cornflower blue
+  "#ffc8dd", // candy pink
+  "#b8e0d2", // aqua mint
+  "#d0b8ff", // electric lavender
+  "#fdffb6", // lemon cream
 ];
 
-// Modern vehicle colors — bolder, more distinct
+// Modern vehicle colors — soft pastels, contemporary feel
 export const VEHICLE_COLORS = [
-  "#e63946", // crimson
-  "#2ec4b6", // teal
-  "#f4a261", // amber
-  "#264653", // deep teal
-  "#e76f51", // burnt sienna
-  "#606c38", // olive
-  "#457b9d", // blue steel
-  "#9b5de5", // electric purple
-  "#f15bb5", // hot pink
-  "#00bbf9", // cyan
+  "#94b8d0", // dusty blue
+  "#e8a0bf", // soft rose
+  "#b5c99a", // sage green
+  "#c4a7d7", // lavender mist
+  "#f2cc8f", // warm sand
+  "#a8dadc", // powder teal
+  "#d4a5a5", // blush mauve
+  "#89b0ae", // muted seafoam
+  "#dda0dd", // soft plum
+  "#b8d4e3", // sky wash
 ];
 
 export const CITIES = [

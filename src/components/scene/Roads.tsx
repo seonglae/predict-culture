@@ -21,11 +21,40 @@ function isRoad(type: string): boolean {
   return type.startsWith("road_");
 }
 
+function isWater(type: string): boolean {
+  return type === "water" || type === "river";
+}
+
 export function Roads({ tiles, gridSize, tileSize }: RoadsProps) {
   const roadTiles = useMemo(() => tiles.filter((t) => isRoad(t.type)), [tiles]);
+  const waterTiles = useMemo(() => tiles.filter((t) => isWater(t.type)), [tiles]);
 
   return (
     <group>
+      {/* Water tiles */}
+      {waterTiles.map((tile, i) => {
+        const x = (tile.col - gridSize / 2) * tileSize + tileSize / 2;
+        const z = (tile.row - gridSize / 2) * tileSize + tileSize / 2;
+        return (
+          <mesh
+            key={`water-${i}`}
+            receiveShadow
+            position={[x, 0.02, z]}
+            rotation={[-Math.PI / 2, 0, 0]}
+          >
+            <planeGeometry args={[tileSize, tileSize]} />
+            <meshStandardMaterial
+              color="#7ec8e3"
+              roughness={0.2}
+              metalness={0.1}
+              transparent
+              opacity={0.85}
+            />
+          </mesh>
+        );
+      })}
+
+      {/* Road tiles */}
       {roadTiles.map((tile, i) => {
         const x = (tile.col - gridSize / 2) * tileSize + tileSize / 2;
         const z = (tile.row - gridSize / 2) * tileSize + tileSize / 2;

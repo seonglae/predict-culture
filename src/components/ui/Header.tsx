@@ -11,14 +11,14 @@ export function Header() {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-3">
-      {/* Logo — hide text on home page */}
+      {/* Logo */}
       <Link href="/" className="flex items-center gap-2 group">
-        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent-teal to-accent-pink flex items-center justify-center shadow-lg shadow-accent-teal/15">
-          <span className="text-[9px] font-black text-white tracking-tight leading-none">SD</span>
-        </div>
         {!isHome && (
-          <span className="text-xs font-bold text-foreground/50 group-hover:text-foreground/70 transition-colors tracking-wide uppercase">
-            SentinelDrive
+          <span
+            className="text-sm font-bold text-foreground/50 group-hover:text-foreground/70 transition-colors tracking-wider uppercase"
+            style={{ fontFamily: "var(--font-display), sans-serif" }}
+          >
+            PredictDrive
           </span>
         )}
       </Link>

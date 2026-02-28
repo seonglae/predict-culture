@@ -96,6 +96,56 @@ html, body {
   border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
+/* ─── Entry Card ─── */
+.entry-card {
+  background: rgba(255,255,255,0.5);
+  border: 1px solid rgba(0,0,0,0.06);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 12px 40px -8px rgba(0,0,0,0.08);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  isolation: isolate;
+  transform: translateZ(0);
+}
+.dark .entry-card {
+  background: linear-gradient(135deg, rgba(18,18,28,0.45) 0%, rgba(10,10,18,0.55) 100%);
+  border: 1px solid rgba(255,255,255,0.07);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 16px 48px -8px rgba(0,0,0,0.4);
+}
+
+.entry-input {
+  background: rgba(0,0,0,0.03);
+  border-color: rgba(0,0,0,0.06);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.04);
+}
+.dark .entry-input {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.06);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.15);
+}
+
+.entry-diff-btn {
+  background: transparent;
+  border-color: transparent;
+}
+.entry-diff-btn.active {
+  background: rgba(0,0,0,0.04);
+  border-color: rgba(0,0,0,0.08);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 2px 6px rgba(0,0,0,0.06);
+}
+.dark .entry-diff-btn.active {
+  background: rgba(255,255,255,0.07);
+  border-color: rgba(255,255,255,0.1);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.entry-submit {
+  background: rgba(0, 229, 199, 0.08);
+  border: 1px solid rgba(0, 229, 199, 0.12);
+}
+.entry-submit:hover:not(:disabled) {
+  box-shadow: 0 0 24px rgba(0, 229, 199, 0.08);
+}
+
 /* Animations */
 @keyframes pulse-glow {
   0%, 100% { box-shadow: 0 0 20px rgba(0, 229, 199, 0.12); }

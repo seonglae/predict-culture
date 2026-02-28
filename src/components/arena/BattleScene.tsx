@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { TrafficScene } from "@/components/scene/TrafficScene";
 import { BattleTimer } from "./BattleTimer";
+import { GlobeMini } from "./GlobeMini";
 import { useSimulation } from "@/hooks/useSimulation";
 
 interface Tile {
@@ -40,6 +41,8 @@ interface BattleSceneProps {
   onSimulationComplete: () => void;
   predictions?: { x: number; z: number; color: string; label: string }[];
   showAccident?: boolean;
+  cityName?: string;
+  cityLabel?: string;
 }
 
 export function BattleScene({
@@ -55,6 +58,8 @@ export function BattleScene({
   onSimulationComplete,
   predictions = [],
   showAccident = false,
+  cityName,
+  cityLabel,
 }: BattleSceneProps) {
   const [hasPredicted, setHasPredicted] = useState(false);
   const [accidentOccurred, setAccidentOccurred] = useState(false);
@@ -90,6 +95,8 @@ export function BattleScene({
 
   return (
     <div className="relative w-full h-full">
+      <GlobeMini cityName={cityName} cityLabel={cityLabel} />
+
       <BattleTimer
         currentTime={currentTime}
         hasPredicted={hasPredicted}
