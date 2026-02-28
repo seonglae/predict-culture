@@ -1,26 +1,32 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useTheme } from "@/components/ThemeProvider";
 
 export function Header() {
   const { theme, toggle } = useTheme();
+  const pathname = usePathname();
+  const isHome = pathname === "/";
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-3">
+      {/* Logo — hide text on home page */}
       <Link href="/" className="flex items-center gap-2 group">
-        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent-teal to-accent-purple flex items-center justify-center shadow-lg shadow-accent-teal/15">
+        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent-teal to-accent-pink flex items-center justify-center shadow-lg shadow-accent-teal/15">
           <span className="text-[9px] font-black text-white tracking-tight leading-none">SD</span>
         </div>
-        <span className="text-xs font-bold text-foreground/40 group-hover:text-foreground/60 transition-colors tracking-wide uppercase">
-          SentinelDrive
-        </span>
+        {!isHome && (
+          <span className="text-xs font-bold text-foreground/50 group-hover:text-foreground/70 transition-colors tracking-wide uppercase">
+            SentinelDrive
+          </span>
+        )}
       </Link>
 
       <nav className="flex items-center gap-4">
         <Link
           href="/leaderboard"
-          className="text-[11px] text-foreground/25 hover:text-foreground/50 transition-colors tracking-widest uppercase font-mono"
+          className="text-[11px] text-foreground/40 hover:text-foreground/70 transition-colors tracking-widest uppercase font-mono"
         >
           Rankings
         </Link>
@@ -28,7 +34,7 @@ export function Header() {
         {/* Theme toggle */}
         <button
           onClick={toggle}
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-foreground/30 hover:text-foreground/60 hover:bg-foreground/5 transition-colors cursor-pointer"
+          className="flex h-7 w-7 items-center justify-center rounded-lg text-foreground/40 hover:text-foreground/70 hover:bg-foreground/8 transition-colors cursor-pointer"
           aria-label="Toggle theme"
         >
           {theme === "light" ? (

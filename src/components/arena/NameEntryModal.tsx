@@ -28,7 +28,7 @@ export function NameEntryModal({ onSubmit, initialName = "" }: NameEntryModalPro
 
   return (
     <div className="w-full max-w-sm mx-4">
-      <div className="glass-strong rounded-2xl p-6">
+      <div className="rounded-2xl p-6 backdrop-blur-xl bg-background/40 border border-foreground/[0.06] shadow-2xl shadow-black/10">
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className="block text-[10px] font-mono mb-1.5 text-muted uppercase tracking-[0.2em]">

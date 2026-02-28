@@ -114,7 +114,7 @@ export function TrafficScene({
     <div className="w-full h-full rounded-2xl overflow-hidden border border-white/[0.06]">
       <Canvas
         shadows
-        camera={{ position: [0, mapSize * 1.2, mapSize * 0.8], fov: 50 }}
+        camera={{ position: [0, mapSize * 2, mapSize * 1.2], fov: 50 }}
         gl={{ antialias: true, alpha: false }}
         style={{ background: "#dce8f0" }}
       >
@@ -179,7 +179,7 @@ export function TrafficScene({
             maxPolarAngle={Math.PI / 2}
             minPolarAngle={0}
             minDistance={mapSize * 0.5}
-            maxDistance={mapSize * 3}
+            maxDistance={mapSize * 5}
           />
 
           <CameraRig mapSize={mapSize} />
