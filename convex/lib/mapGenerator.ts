@@ -239,14 +239,19 @@ export function generateMap(
     usedPositions.add(posKey);
 
     const vType = pick(rng, vehicleTypes);
-    const x = (tile.col - gridSize / 2) * tileSize + tileSize / 2 + (rng() - 0.5) * 0.6;
-    const z = (tile.row - gridSize / 2) * tileSize + tileSize / 2 + (rng() - 0.5) * 0.6;
+    // Spawn at road center with minimal offset
+    const x = (tile.col - gridSize / 2) * tileSize + tileSize / 2;
+    const z = (tile.row - gridSize / 2) * tileSize + tileSize / 2;
 
-    // Heading based on road direction
+    // Heading based on road direction — use proper cardinal headings
     let heading = 0;
     if (tile.type === "road_straight_ns") heading = rng() > 0.5 ? 0 : Math.PI;
     else if (tile.type === "road_straight_ew") heading = rng() > 0.5 ? Math.PI / 2 : -Math.PI / 2;
-    else heading = rng() * Math.PI * 2;
+    else {
+      // At intersections, pick a random cardinal direction
+      const cardinals = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
+      heading = pick(rng, cardinals);
+    }
 
     vehicles.push({
       id: `v${i}`,
@@ -254,8 +259,8 @@ export function generateMap(
       x,
       z,
       heading,
-      speed: vType === "motorcycle" ? 3 + rng() * 4 : 2 + rng() * 3,
-      aggressiveness: vType === "motorcycle" ? 0.5 + rng() * 0.5 : 0.2 + rng() * 0.8,
+      speed: vType === "motorcycle" ? 3.5 + rng() * 3.5 : 2.5 + rng() * 3,
+      aggressiveness: vType === "motorcycle" ? 0.6 + rng() * 0.4 : 0.3 + rng() * 0.7,
       color: pick(rng, VEHICLE_COLORS),
     });
   }
