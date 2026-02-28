@@ -47,11 +47,11 @@ export function Matchmaking({ onTimeout, opponentFound, opponentName, showGlobe 
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#030308]"
     >
-      {/* Globe background — fills entire screen */}
+      {/* Globe — centered, sized to fit */}
       {showGlobe && (
-        <div className="absolute inset-0">
-          <Canvas camera={{ position: [0, 0, 3.5], fov: 45 }}>
-            <GeoGlobe radius={1.5} spinSpeed={0.3} cities={CITY_COORDS} />
+        <div className="w-52 h-52 mb-6">
+          <Canvas camera={{ position: [0, 0, 3.2], fov: 45 }}>
+            <GeoGlobe radius={1.3} spinSpeed={0.3} cities={CITY_COORDS} />
           </Canvas>
         </div>
       )}
@@ -81,9 +81,6 @@ export function Matchmaking({ onTimeout, opponentFound, opponentName, showGlobe 
         </motion.div>
       ) : (
         <div className="text-center">
-          <p className="text-[10px] tracking-[0.5em] uppercase text-white/25 font-mono mb-3 animate-pulse">
-            Scanning Global Network
-          </p>
           <p className="text-lg text-white/60 mb-2 font-mono">Finding opponent...</p>
           <p className="text-white/25 text-xs font-mono">
             {countdown > 0 ? `${countdown}s` : "Starting with AI..."}

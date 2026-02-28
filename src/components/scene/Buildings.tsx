@@ -51,7 +51,7 @@ export function Buildings({ tiles, gridSize, tileSize }: BuildingsProps) {
         const x = (tile.col - gridSize / 2) * tileSize + tileSize / 2;
         const z = (tile.row - gridSize / 2) * tileSize + tileSize / 2;
         const height = tile.height ?? 2;
-        const color = tile.color ?? "#a2d2ff";
+        const color = tile.color ?? "#d5cfc7";
         const dist = Math.sqrt(x * x + z * z);
         const delay = (dist / maxDist) * 0.8 + Math.random() * 0.1;
 
@@ -102,7 +102,7 @@ function BuildingBlock({
   const groupRef = useRef<THREE.Group>(null);
   const dropHeight = 25 + height;
   const dropDuration = 0.6;
-  const padding = 0.5;
+  const padding = 0.4;
   const buildingSize = tileSize - padding * 2;
 
   useFrame(() => {
@@ -121,10 +121,10 @@ function BuildingBlock({
 
   return (
     <group ref={groupRef} position={[x, dropHeight, z]}>
-      {/* Main body — soft rounded box */}
+      {/* Main body — concrete */}
       <RoundedBox
         args={[buildingSize, height, buildingSize]}
-        radius={isTall ? 0.2 : 0.35}
+        radius={isTall ? 0.1 : 0.15}
         smoothness={4}
         position={[0, height / 2, 0]}
         castShadow
@@ -132,42 +132,41 @@ function BuildingBlock({
       >
         <meshStandardMaterial
           color={color}
-          roughness={0.4}
-          metalness={0.05}
+          roughness={0.75}
+          metalness={0.02}
         />
       </RoundedBox>
 
-      {/* Roof — flat accent top */}
-      <RoundedBox
-        args={[buildingSize - 0.2, 0.12, buildingSize - 0.2]}
-        radius={0.1}
-        smoothness={4}
-        position={[0, height + 0.06, 0]}
-        castShadow
-      >
-        <meshStandardMaterial
-          color={color}
-          roughness={0.35}
-          metalness={0.08}
-        />
-      </RoundedBox>
+      {/* Roof ledge */}
+      <mesh position={[0, height + 0.04, 0]} castShadow>
+        <boxGeometry args={[buildingSize + 0.06, 0.08, buildingSize + 0.06]} />
+        <meshStandardMaterial color="#9a9590" roughness={0.8} />
+      </mesh>
 
-      {/* Tall buildings get a darker accent band */}
+      {/* Tall buildings: glass accent band */}
       {isTall && (
-        <RoundedBox
-          args={[buildingSize + 0.02, 0.15, buildingSize + 0.02]}
-          radius={0.08}
-          smoothness={2}
-          position={[0, height * 0.6, 0]}
-        >
-          <meshStandardMaterial color="white" roughness={0.3} transparent opacity={0.25} />
-        </RoundedBox>
+        <mesh position={[0, height * 0.7, 0]}>
+          <boxGeometry args={[buildingSize + 0.01, 0.3, buildingSize + 0.01]} />
+          <meshStandardMaterial
+            color="#8fbcd4"
+            roughness={0.15}
+            metalness={0.2}
+            transparent
+            opacity={0.5}
+          />
+        </mesh>
       )}
 
-      {/* Windows — minimal light dots */}
+      {/* Window grid — subtle lit rows */}
       {height > 2 && (
-        <WindowStrips buildingSize={buildingSize} height={height} isTall={isTall} />
+        <WindowGrid buildingSize={buildingSize} height={height} isTall={isTall} />
       )}
+
+      {/* Ground floor — darker base */}
+      <mesh position={[0, 0.4, 0]}>
+        <boxGeometry args={[buildingSize + 0.02, 0.8, buildingSize + 0.02]} />
+        <meshStandardMaterial color="#7a7570" roughness={0.85} />
+      </mesh>
     </group>
   );
 }
@@ -191,68 +190,81 @@ function ParkTile({
 
   return (
     <group ref={groupRef} position={[x, dropHeight, z]}>
-      {/* Ground patch */}
-      <RoundedBox
-        args={[tileSize - 0.4, 0.12, tileSize - 0.4]}
-        radius={0.08}
-        smoothness={4}
-        position={[0, 0.06, 0]}
-        receiveShadow
-      >
-        <meshStandardMaterial color="#b5ead7" roughness={0.7} />
-      </RoundedBox>
+      {/* Ground — muted green */}
+      <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[tileSize - 0.3, tileSize - 0.3]} />
+        <meshStandardMaterial color="#6b8f71" roughness={0.85} />
+      </mesh>
 
-      {/* Tree — minimal */}
-      <group position={[0, 0.12, 0]}>
-        <mesh position={[0, 0.25, 0]} castShadow>
-          <cylinderGeometry args={[0.06, 0.08, 0.5, 6]} />
-          <meshStandardMaterial color="#a8896c" roughness={0.9} />
+      {/* Tree — Japanese style */}
+      <group position={[0, 0.03, 0]}>
+        {/* Trunk */}
+        <mesh position={[0, 0.3, 0]} castShadow>
+          <cylinderGeometry args={[0.05, 0.07, 0.6, 6]} />
+          <meshStandardMaterial color="#6b5b4a" roughness={0.9} />
         </mesh>
-        <mesh position={[0, 0.7, 0]} castShadow>
-          <sphereGeometry args={[0.45, 8, 8]} />
-          <meshStandardMaterial color="#7ec99a" roughness={0.6} />
+        {/* Canopy — layered */}
+        <mesh position={[0, 0.75, 0]} castShadow>
+          <sphereGeometry args={[0.4, 8, 6]} />
+          <meshStandardMaterial color="#4a6b4a" roughness={0.7} />
+        </mesh>
+        <mesh position={[0, 0.95, 0]} castShadow>
+          <sphereGeometry args={[0.28, 8, 6]} />
+          <meshStandardMaterial color="#3d5c3d" roughness={0.7} />
         </mesh>
       </group>
     </group>
   );
 }
 
-// Clean window strips instead of individual dots (less draw calls)
-function WindowStrips({ buildingSize, height, isTall }: { buildingSize: number; height: number; isTall: boolean }) {
-  const floors = Math.floor(height / 1.2);
-  const strips: { y: number }[] = [];
-
-  for (let f = 0; f < floors; f++) {
-    strips.push({ y: 0.8 + f * 1.2 });
-  }
+function WindowGrid({ buildingSize, height, isTall }: { buildingSize: number; height: number; isTall: boolean }) {
+  const floors = Math.floor((height - 1) / 1.0);
+  const windowsPerSide = isTall ? 4 : 3;
+  const windowW = (buildingSize * 0.65) / windowsPerSide;
+  const windowH = 0.35;
 
   return (
     <>
-      {strips.map((s, i) => (
-        <group key={i}>
-          {/* Front/back window strips */}
-          <mesh position={[0, s.y, buildingSize / 2 + 0.01]}>
-            <planeGeometry args={[buildingSize * 0.7, 0.25]} />
-            <meshStandardMaterial
-              color="#fffde7"
-              emissive="#fffde7"
-              emissiveIntensity={0.15}
-              transparent
-              opacity={0.6}
-            />
-          </mesh>
-          <mesh position={[0, s.y, -(buildingSize / 2 + 0.01)]}>
-            <planeGeometry args={[buildingSize * 0.7, 0.25]} />
-            <meshStandardMaterial
-              color="#fffde7"
-              emissive="#fffde7"
-              emissiveIntensity={0.15}
-              transparent
-              opacity={0.6}
-            />
-          </mesh>
-        </group>
-      ))}
+      {Array.from({ length: Math.min(floors, 8) }).map((_, f) => {
+        const y = 1.2 + f * 1.0;
+        if (y > height - 0.5) return null;
+        return (
+          <group key={f}>
+            {/* Front face windows */}
+            {Array.from({ length: windowsPerSide }).map((_, w) => {
+              const xOff = (w - (windowsPerSide - 1) / 2) * (windowW + 0.08);
+              return (
+                <mesh key={`f${w}`} position={[xOff, y, buildingSize / 2 + 0.005]}>
+                  <planeGeometry args={[windowW, windowH]} />
+                  <meshStandardMaterial
+                    color="#ffedc2"
+                    emissive="#ffedc2"
+                    emissiveIntensity={0.08}
+                    transparent
+                    opacity={0.5}
+                  />
+                </mesh>
+              );
+            })}
+            {/* Back face windows */}
+            {Array.from({ length: windowsPerSide }).map((_, w) => {
+              const xOff = (w - (windowsPerSide - 1) / 2) * (windowW + 0.08);
+              return (
+                <mesh key={`b${w}`} position={[xOff, y, -(buildingSize / 2 + 0.005)]} rotation={[0, Math.PI, 0]}>
+                  <planeGeometry args={[windowW, windowH]} />
+                  <meshStandardMaterial
+                    color="#ffedc2"
+                    emissive="#ffedc2"
+                    emissiveIntensity={0.08}
+                    transparent
+                    opacity={0.4}
+                  />
+                </mesh>
+              );
+            })}
+          </group>
+        );
+      })}
     </>
   );
 }

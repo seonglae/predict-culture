@@ -232,26 +232,37 @@ export function generateMap(
   const vehicles: VehicleSpawn[] = [];
   const usedPositions = new Set<string>();
 
+  // Ensure minimum 2-tile gap between spawned vehicles
+  const isNearExisting = (row: number, col: number) => {
+    for (const key of usedPositions) {
+      const [r, c] = key.split(",").map(Number);
+      if (Math.abs(r - row) + Math.abs(c - col) < 2) return true;
+    }
+    return false;
+  };
+
   for (let i = 0; i < vehicleCount && i < shuffledRoads.length; i++) {
     const tile = shuffledRoads[i];
     const posKey = `${tile.row},${tile.col}`;
     if (usedPositions.has(posKey)) continue;
+    if (isNearExisting(tile.row, tile.col)) continue;
     usedPositions.add(posKey);
 
     const vType = pick(rng, vehicleTypes);
-    // Spawn at road center with minimal offset
     const x = (tile.col - gridSize / 2) * tileSize + tileSize / 2;
     const z = (tile.row - gridSize / 2) * tileSize + tileSize / 2;
 
-    // Heading based on road direction — use proper cardinal headings
+    // Heading based on road direction
     let heading = 0;
     if (tile.type === "road_straight_ns") heading = rng() > 0.5 ? 0 : Math.PI;
     else if (tile.type === "road_straight_ew") heading = rng() > 0.5 ? Math.PI / 2 : -Math.PI / 2;
     else {
-      // At intersections, pick a random cardinal direction
       const cardinals = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
       heading = pick(rng, cardinals);
     }
+
+    // Varied speeds — start slower to prevent immediate collisions
+    const baseSpeed = vType === "motorcycle" ? 2.5 + rng() * 2 : 1.5 + rng() * 2.5;
 
     vehicles.push({
       id: `v${i}`,
@@ -259,8 +270,8 @@ export function generateMap(
       x,
       z,
       heading,
-      speed: vType === "motorcycle" ? 3.5 + rng() * 3.5 : 2.5 + rng() * 3,
-      aggressiveness: vType === "motorcycle" ? 0.6 + rng() * 0.4 : 0.3 + rng() * 0.7,
+      speed: baseSpeed,
+      aggressiveness: vType === "motorcycle" ? 0.5 + rng() * 0.4 : 0.2 + rng() * 0.6,
       color: pick(rng, VEHICLE_COLORS),
     });
   }

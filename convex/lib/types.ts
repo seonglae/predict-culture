@@ -96,32 +96,32 @@ export const DIFFICULTY_CONFIG: Record<
   hell: { gridSize: 16, vehicleRange: [25, 35], aiToolCalls: 8, droneCount: 4, helicopterCount: 2 },
 };
 
-// Vibrant pastel building colors — bright, cute, modern
+// Japanese urban building colors — muted, sophisticated, concrete/glass
 export const BUILDING_COLORS = [
-  "#ffb3c6", // hot pink pastel
-  "#a2d2ff", // bright sky blue
-  "#cdb4db", // vivid lilac
-  "#ffd6a5", // warm peach
-  "#caffbf", // bright mint
-  "#bde0fe", // cornflower blue
-  "#ffc8dd", // candy pink
-  "#b8e0d2", // aqua mint
-  "#d0b8ff", // electric lavender
-  "#fdffb6", // lemon cream
+  "#e8e4df", // warm concrete
+  "#d5cfc7", // aged concrete
+  "#c8c2b8", // stone gray
+  "#bfb8ae", // warm gray
+  "#d4cec5", // light concrete
+  "#eae6e1", // pale stone
+  "#ccc6bc", // taupe
+  "#e0dbd4", // cream concrete
+  "#b8b2a8", // dark warm gray
+  "#c4bfb5", // mushroom
 ];
 
-// Modern vehicle colors — soft pastels, contemporary feel
+// Realistic Japanese vehicle colors — mostly white/silver/black with some accents
 export const VEHICLE_COLORS = [
-  "#94b8d0", // dusty blue
-  "#e8a0bf", // soft rose
-  "#b5c99a", // sage green
-  "#c4a7d7", // lavender mist
-  "#f2cc8f", // warm sand
-  "#a8dadc", // powder teal
-  "#d4a5a5", // blush mauve
-  "#89b0ae", // muted seafoam
-  "#dda0dd", // soft plum
-  "#b8d4e3", // sky wash
+  "#f5f5f5", // white (most common in Japan)
+  "#f5f5f5", // white
+  "#e8e8e8", // pearl white
+  "#c0c0c0", // silver
+  "#a8a8a8", // light gray
+  "#3a3a3a", // black
+  "#2c2c2c", // dark black
+  "#1a3a5c", // dark navy
+  "#8b1a1a", // dark red
+  "#2d4a3e", // forest green
 ];
 
 export const CITIES = [

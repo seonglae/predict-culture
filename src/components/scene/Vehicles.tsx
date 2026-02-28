@@ -33,12 +33,12 @@ interface VehiclesProps {
 }
 
 const VEHICLE_DIMS: Record<string, { w: number; h: number; l: number }> = {
-  car: { w: 0.8, h: 0.5, l: 1.6 },
-  truck: { w: 1.0, h: 0.7, l: 2.4 },
-  bus: { w: 1.2, h: 0.8, l: 3.2 },
-  motorcycle: { w: 0.4, h: 0.45, l: 1.2 },
-  drone: { w: 0.6, h: 0.15, l: 0.6 },
-  helicopter: { w: 1.0, h: 0.6, l: 2.0 },
+  car: { w: 0.75, h: 0.45, l: 1.5 },
+  truck: { w: 0.9, h: 0.6, l: 2.2 },
+  bus: { w: 1.1, h: 0.7, l: 3.0 },
+  motorcycle: { w: 0.35, h: 0.4, l: 1.0 },
+  drone: { w: 0.5, h: 0.12, l: 0.5 },
+  helicopter: { w: 0.9, h: 0.5, l: 1.8 },
 };
 
 export function Vehicles({ initialVehicles, currentFrame }: VehiclesProps) {
@@ -54,19 +54,13 @@ export function Vehicles({ initialVehicles, currentFrame }: VehiclesProps) {
         const altitude = frame?.altitude ?? v.altitude ?? 0;
 
         if (v.type === "motorcycle") {
-          return (
-            <Motorcycle key={v.id} x={x} z={z} heading={heading} color={v.color} isCrashed={isCrashed} />
-          );
+          return <Motorcycle key={v.id} x={x} z={z} heading={heading} color={v.color} isCrashed={isCrashed} />;
         }
         if (v.type === "drone") {
-          return (
-            <Drone key={v.id} x={x} z={z} heading={heading} altitude={altitude} />
-          );
+          return <Drone key={v.id} x={x} z={z} heading={heading} altitude={altitude} />;
         }
         if (v.type === "helicopter") {
-          return (
-            <Helicopter key={v.id} x={x} z={z} heading={heading} altitude={altitude} color={v.color} />
-          );
+          return <Helicopter key={v.id} x={x} z={z} heading={heading} altitude={altitude} color={v.color} />;
         }
 
         return (
@@ -77,7 +71,6 @@ export function Vehicles({ initialVehicles, currentFrame }: VehiclesProps) {
   );
 }
 
-// Modern vehicle — cleaner geometry, smooth rounded shapes
 function Vehicle({
   x, z, heading, color, dims, isCrashed, type,
 }: {
@@ -104,99 +97,101 @@ function Vehicle({
 
   const isBus = type === "bus";
   const isTruck = type === "truck";
-  const crashColor = "#ff6b6b";
 
   return (
     <group ref={groupRef} position={[x, 0, z]} rotation={[0, heading, 0]}>
-      {/* Body — main shape */}
+      {/* Main body */}
       <RoundedBox
         args={[dims.w, dims.h, dims.l]}
-        radius={0.15}
+        radius={0.08}
         smoothness={4}
         position={[0, dims.h / 2 + 0.1, 0]}
         castShadow
       >
         <meshStandardMaterial
-          color={isCrashed ? crashColor : color}
-          roughness={0.25}
-          metalness={0.15}
+          color={isCrashed ? "#cc3333" : color}
+          roughness={0.35}
+          metalness={0.25}
           emissive={isCrashed ? "#ff0000" : "#000000"}
-          emissiveIntensity={isCrashed ? 0.4 : 0}
+          emissiveIntensity={isCrashed ? 0.3 : 0}
         />
       </RoundedBox>
 
-      {/* Cabin — glass top section */}
+      {/* Windshield / cabin glass */}
       {!isTruck && (
         <RoundedBox
-          args={[dims.w - 0.1, dims.h * (isBus ? 0.5 : 0.55), dims.l * (isBus ? 0.65 : 0.45)]}
-          radius={0.1}
+          args={[dims.w - 0.08, dims.h * (isBus ? 0.4 : 0.5), dims.l * (isBus ? 0.6 : 0.4)]}
+          radius={0.06}
           smoothness={4}
-          position={[0, dims.h + 0.15, isBus ? 0 : -dims.l * 0.04]}
-          castShadow
+          position={[0, dims.h + 0.12, isBus ? 0 : -dims.l * 0.03]}
         >
           <meshStandardMaterial
-            color="#e3edf7"
-            roughness={0.15}
-            metalness={0.05}
+            color="#1a2233"
+            roughness={0.1}
+            metalness={0.3}
             transparent
-            opacity={0.85}
+            opacity={0.8}
           />
         </RoundedBox>
       )}
 
-      {/* Truck cargo */}
+      {/* Truck cargo box */}
       {isTruck && (
         <RoundedBox
-          args={[dims.w - 0.05, dims.h * 0.7, dims.l * 0.55]}
-          radius={0.08}
+          args={[dims.w - 0.04, dims.h * 0.65, dims.l * 0.5]}
+          radius={0.04}
           smoothness={4}
-          position={[0, dims.h + 0.05, -dims.l * 0.15]}
+          position={[0, dims.h + 0.02, -dims.l * 0.14]}
           castShadow
         >
           <meshStandardMaterial
-            color={isCrashed ? crashColor : color}
-            roughness={0.3}
-            metalness={0.1}
+            color={isCrashed ? "#cc3333" : "#e8e4df"}
+            roughness={0.6}
+            metalness={0.05}
           />
         </RoundedBox>
       )}
 
-      {/* Wheels — dark circles */}
+      {/* Wheels */}
       {[
-        [dims.w / 2, 0.09, dims.l * 0.3],
-        [-dims.w / 2, 0.09, dims.l * 0.3],
-        [dims.w / 2, 0.09, -dims.l * 0.3],
-        [-dims.w / 2, 0.09, -dims.l * 0.3],
+        [dims.w / 2 + 0.01, 0.08, dims.l * 0.3],
+        [-dims.w / 2 - 0.01, 0.08, dims.l * 0.3],
+        [dims.w / 2 + 0.01, 0.08, -dims.l * 0.3],
+        [-dims.w / 2 - 0.01, 0.08, -dims.l * 0.3],
       ].map((pos, i) => (
         <mesh key={i} position={pos as [number, number, number]} rotation={[0, 0, Math.PI / 2]}>
-          <cylinderGeometry args={[0.09, 0.09, 0.06, 8]} />
-          <meshStandardMaterial color="#2a2a2e" roughness={0.8} />
+          <cylinderGeometry args={[0.08, 0.08, 0.04, 8]} />
+          <meshStandardMaterial color="#1a1a1a" roughness={0.9} />
         </mesh>
       ))}
 
-      {/* Bus accent stripe */}
-      {isBus && (
-        <RoundedBox
-          args={[dims.w + 0.01, 0.06, dims.l - 0.15]}
-          radius={0.03}
-          smoothness={2}
-          position={[0, dims.h * 0.35 + 0.1, 0]}
-        >
-          <meshStandardMaterial color="white" roughness={0.3} transparent opacity={0.6} />
-        </RoundedBox>
-      )}
-
-      {/* Headlights */}
+      {/* Headlights — warm white */}
       {["left", "right"].map((side, i) => (
         <mesh
           key={side}
-          position={[(i === 0 ? -1 : 1) * dims.w * 0.35, dims.h * 0.35 + 0.1, dims.l / 2 + 0.01]}
+          position={[(i === 0 ? -1 : 1) * dims.w * 0.32, dims.h * 0.3 + 0.1, dims.l / 2 + 0.01]}
         >
-          <circleGeometry args={[0.06, 8]} />
+          <circleGeometry args={[0.04, 8]} />
           <meshStandardMaterial
-            color="#fffbe6"
-            emissive="#fffbe6"
-            emissiveIntensity={0.3}
+            color="#fff5e0"
+            emissive="#fff5e0"
+            emissiveIntensity={0.2}
+          />
+        </mesh>
+      ))}
+
+      {/* Taillights — red */}
+      {["left", "right"].map((side, i) => (
+        <mesh
+          key={`tail-${side}`}
+          position={[(i === 0 ? -1 : 1) * dims.w * 0.32, dims.h * 0.3 + 0.1, -dims.l / 2 - 0.01]}
+          rotation={[0, Math.PI, 0]}
+        >
+          <circleGeometry args={[0.03, 8]} />
+          <meshStandardMaterial
+            color="#cc2222"
+            emissive="#cc2222"
+            emissiveIntensity={0.15}
           />
         </mesh>
       ))}
@@ -206,7 +201,6 @@ function Vehicle({
   );
 }
 
-// Motorcycle — sleek minimal
 function Motorcycle({
   x, z, heading, color, isCrashed,
 }: {
@@ -232,38 +226,26 @@ function Motorcycle({
 
   return (
     <group ref={groupRef} position={[x, 0, z]} rotation={[0, heading, 0]}>
-      {/* Body */}
-      <RoundedBox args={[0.3, 0.25, 0.9]} radius={0.1} smoothness={4} position={[0, 0.32, 0]} castShadow>
+      <RoundedBox args={[0.25, 0.22, 0.8]} radius={0.08} smoothness={4} position={[0, 0.3, 0]} castShadow>
         <meshStandardMaterial
-          color={isCrashed ? "#ff6b6b" : color}
-          roughness={0.2}
-          metalness={0.25}
-          emissive={isCrashed ? "#ff0000" : "#000000"}
-          emissiveIntensity={isCrashed ? 0.4 : 0}
+          color={isCrashed ? "#cc3333" : color}
+          roughness={0.25}
+          metalness={0.3}
         />
       </RoundedBox>
-
-      {/* Handlebar */}
-      <RoundedBox args={[0.45, 0.06, 0.06]} radius={0.02} smoothness={2} position={[0, 0.52, 0.3]}>
-        <meshStandardMaterial color="#555" roughness={0.3} metalness={0.4} />
-      </RoundedBox>
-
-      {/* Wheels */}
-      <mesh position={[0, 0.12, 0.36]}>
-        <cylinderGeometry args={[0.12, 0.12, 0.08, 12]} />
-        <meshStandardMaterial color="#2a2a2e" roughness={0.8} />
+      <mesh position={[0, 0.1, 0.33]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.1, 0.1, 0.06, 10]} />
+        <meshStandardMaterial color="#1a1a1a" roughness={0.9} />
       </mesh>
-      <mesh position={[0, 0.12, -0.32]}>
-        <cylinderGeometry args={[0.12, 0.12, 0.08, 12]} />
-        <meshStandardMaterial color="#2a2a2e" roughness={0.8} />
+      <mesh position={[0, 0.1, -0.3]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.1, 0.1, 0.06, 10]} />
+        <meshStandardMaterial color="#1a1a1a" roughness={0.9} />
       </mesh>
-
       {isCrashed && <CrashEffect />}
     </group>
   );
 }
 
-// Drone — minimal quad
 function Drone({
   x, z, heading, altitude,
 }: {
@@ -286,37 +268,30 @@ function Drone({
 
   return (
     <group ref={groupRef} position={[x, altitude, z]}>
-      <RoundedBox args={[0.28, 0.1, 0.28]} radius={0.05} smoothness={4}>
-        <meshStandardMaterial color="#a8dadc" roughness={0.2} metalness={0.3} />
+      <RoundedBox args={[0.24, 0.08, 0.24]} radius={0.04} smoothness={4}>
+        <meshStandardMaterial color="#555555" roughness={0.3} metalness={0.4} />
       </RoundedBox>
-
       {[
-        [0.22, 0.04, 0.22],
-        [-0.22, 0.04, 0.22],
-        [0.22, 0.04, -0.22],
-        [-0.22, 0.04, -0.22],
+        [0.18, 0.03, 0.18],
+        [-0.18, 0.03, 0.18],
+        [0.18, 0.03, -0.18],
+        [-0.18, 0.03, -0.18],
       ].map((pos, i) => (
         <group key={i} position={pos as [number, number, number]}>
           <mesh>
-            <cylinderGeometry args={[0.01, 0.01, 0.12, 4]} />
-            <meshStandardMaterial color="#555" />
+            <cylinderGeometry args={[0.008, 0.008, 0.08, 4]} />
+            <meshStandardMaterial color="#444" />
           </mesh>
-          <mesh position={[0, 0.07, 0]}>
-            <boxGeometry args={[0.2, 0.008, 0.03]} />
-            <meshStandardMaterial color="#ddd" transparent opacity={0.5} />
+          <mesh position={[0, 0.05, 0]}>
+            <boxGeometry args={[0.16, 0.005, 0.025]} />
+            <meshStandardMaterial color="#999" transparent opacity={0.4} />
           </mesh>
         </group>
       ))}
-
-      <mesh position={[0, -0.06, 0.13]}>
-        <sphereGeometry args={[0.015, 6, 6]} />
-        <meshStandardMaterial color="#ff6b6b" emissive="#ff6b6b" emissiveIntensity={2} />
-      </mesh>
     </group>
   );
 }
 
-// Helicopter — clean modern
 function Helicopter({
   x, z, heading, altitude, color,
 }: {
@@ -341,64 +316,43 @@ function Helicopter({
 
   return (
     <group ref={groupRef} position={[x, altitude, z]}>
-      <RoundedBox args={[0.55, 0.4, 1.5]} radius={0.15} smoothness={4} castShadow>
-        <meshStandardMaterial color={color} roughness={0.25} metalness={0.2} />
+      <RoundedBox args={[0.5, 0.35, 1.3]} radius={0.12} smoothness={4} castShadow>
+        <meshStandardMaterial color={color} roughness={0.3} metalness={0.25} />
       </RoundedBox>
-
-      <RoundedBox args={[0.5, 0.28, 0.45]} radius={0.1} smoothness={4} position={[0, 0.08, 0.52]}>
-        <meshStandardMaterial color="#e3edf7" roughness={0.15} metalness={0.05} transparent opacity={0.75} />
+      <RoundedBox args={[0.45, 0.25, 0.4]} radius={0.08} smoothness={4} position={[0, 0.06, 0.46]}>
+        <meshStandardMaterial color="#1a2233" roughness={0.1} metalness={0.2} transparent opacity={0.7} />
       </RoundedBox>
-
-      <RoundedBox args={[0.12, 0.12, 0.75]} radius={0.05} smoothness={2} position={[0, 0.08, -1.1]}>
-        <meshStandardMaterial color={color} roughness={0.3} metalness={0.2} />
+      <RoundedBox args={[0.1, 0.1, 0.65]} radius={0.04} smoothness={2} position={[0, 0.06, -0.95]}>
+        <meshStandardMaterial color={color} roughness={0.35} metalness={0.25} />
       </RoundedBox>
-
-      <RoundedBox args={[0.03, 0.3, 0.18]} radius={0.015} smoothness={2} position={[0, 0.22, -1.4]}>
-        <meshStandardMaterial color={color} roughness={0.3} metalness={0.2} />
-      </RoundedBox>
-
-      {/* Main rotor */}
-      <group position={[0, 0.32, 0]} rotation={[0, rotorAngle.current, 0]}>
+      <group position={[0, 0.28, 0]} rotation={[0, rotorAngle.current, 0]}>
         <mesh>
-          <boxGeometry args={[2.0, 0.015, 0.08]} />
-          <meshStandardMaterial color="#bbb" transparent opacity={0.4} />
+          <boxGeometry args={[1.8, 0.012, 0.06]} />
+          <meshStandardMaterial color="#888" transparent opacity={0.35} />
         </mesh>
         <mesh rotation={[0, Math.PI / 2, 0]}>
-          <boxGeometry args={[2.0, 0.015, 0.08]} />
-          <meshStandardMaterial color="#bbb" transparent opacity={0.4} />
+          <boxGeometry args={[1.8, 0.012, 0.06]} />
+          <meshStandardMaterial color="#888" transparent opacity={0.35} />
         </mesh>
       </group>
-
-      <mesh position={[0, 0.33, 0]}>
-        <cylinderGeometry args={[0.04, 0.04, 0.06, 8]} />
-        <meshStandardMaterial color="#555" metalness={0.5} />
-      </mesh>
-
-      {[-0.22, 0.22].map((xOff, i) => (
-        <mesh key={i} position={[xOff, -0.27, 0]}>
-          <boxGeometry args={[0.03, 0.03, 1.0]} />
-          <meshStandardMaterial color="#555" roughness={0.4} metalness={0.3} />
-        </mesh>
-      ))}
     </group>
   );
 }
 
-// Crash effect — minimal, clean particles
 function CrashEffect() {
   const groupRef = useRef<THREE.Group>(null);
   const particles = useMemo(() => {
-    return Array.from({ length: 8 }, () => ({
-      x: (Math.random() - 0.5) * 2,
-      y: Math.random() * 2 + 0.3,
-      z: (Math.random() - 0.5) * 2,
-      scale: 0.06 + Math.random() * 0.1,
+    return Array.from({ length: 6 }, () => ({
+      x: (Math.random() - 0.5) * 1.5,
+      y: Math.random() * 1.5 + 0.3,
+      z: (Math.random() - 0.5) * 1.5,
+      scale: 0.04 + Math.random() * 0.08,
     }));
   }, []);
 
   useFrame((_, delta) => {
     if (!groupRef.current) return;
-    groupRef.current.rotation.y += delta * 2;
+    groupRef.current.rotation.y += delta * 1.5;
   });
 
   return (
@@ -407,9 +361,9 @@ function CrashEffect() {
         <mesh key={i} position={[p.x, p.y, p.z]}>
           <octahedronGeometry args={[p.scale]} />
           <meshStandardMaterial
-            color={i % 2 === 0 ? "#ff6b6b" : "#ffd93d"}
-            emissive={i % 2 === 0 ? "#ff4444" : "#ff8800"}
-            emissiveIntensity={0.6}
+            color={i % 2 === 0 ? "#ff4444" : "#ff8800"}
+            emissive={i % 2 === 0 ? "#cc0000" : "#cc6600"}
+            emissiveIntensity={0.5}
           />
         </mesh>
       ))}
