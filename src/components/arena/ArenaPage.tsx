@@ -193,8 +193,8 @@ function ArenaContent() {
                     .hero-glaze {
                       background-image: linear-gradient(
                         90deg,
-                        #e8e8e8, #a78bfa, #67e8f9, #f8f8f8,
-                        #f0abfc, #e8e8e8, #67e8f9, #e8e8e8
+                        #1a1a1a, #3a3a3a, #555, #1a1a1a,
+                        #444, #2a2a2a, #555, #1a1a1a
                       );
                       background-size: 300% 100%;
                       -webkit-background-clip: text;
@@ -204,8 +204,8 @@ function ArenaContent() {
                     :global(.dark) .hero-glaze {
                       background-image: linear-gradient(
                         90deg,
-                        #f0f0f0, #c4b5fd, #a5f3fc, #ffffff,
-                        #f5d0fe, #f0f0f0, #a5f3fc, #f0f0f0
+                        #d0d0d0, #e8e8e8, #fff, #d0d0d0,
+                        #e0e0e0, #c8c8c8, #fff, #d0d0d0
                       );
                     }
                     @keyframes hero-shimmer {
