@@ -28,6 +28,12 @@ interface SimulationFrame {
   vehicles: any[];
 }
 
+interface RoadSegment {
+  points: { x: number; z: number }[];
+  width: number;
+  type: "primary" | "secondary" | "residential";
+}
+
 interface BattleSceneProps {
   tiles: Tile[];
   gridSize: number;
@@ -43,6 +49,11 @@ interface BattleSceneProps {
   showAccident?: boolean;
   cityName?: string;
   cityLabel?: string;
+  roads?: RoadSegment[];
+  flash?: (duration?: number) => void;
+  shake?: (intensity?: number, duration?: number) => void;
+  lat?: number;
+  lon?: number;
 }
 
 export function BattleScene({
@@ -60,6 +71,11 @@ export function BattleScene({
   showAccident = false,
   cityName,
   cityLabel,
+  roads,
+  flash,
+  shake,
+  lat,
+  lon,
 }: BattleSceneProps) {
   const [hasPredicted, setHasPredicted] = useState(false);
   const [accidentOccurred, setAccidentOccurred] = useState(false);
@@ -73,13 +89,17 @@ export function BattleScene({
     speed: 1,
     autoStart: true,
     onFrame: (frameIndex) => {
-      // Check if accident frame reached
+      // Check if accident frame reached — instant crash effect
       if (frameIndex >= accidentFrame && !accidentOccurred) {
         setAccidentOccurred(true);
-        // Wait 2 seconds after crash for dramatic effect, then complete
+        // Defer side effects to avoid setState during render
+        queueMicrotask(() => {
+          flash?.(150);
+          shake?.(15, 500);
+        });
         setTimeout(() => {
           onSimulationComplete();
-        }, 2000);
+        }, 800);
       }
     },
   });
@@ -95,7 +115,7 @@ export function BattleScene({
 
   return (
     <div className="relative w-full h-full">
-      <GlobeMini cityName={cityName} cityLabel={cityLabel} />
+      <GlobeMini cityName={cityName} cityLabel={cityLabel} lat={lat} lon={lon} roads={roads} />
 
       <BattleTimer
         currentTime={currentTime}
@@ -113,6 +133,7 @@ export function BattleScene({
         accidentPoint={showAccident || accidentOccurred ? accidentPoint : null}
         onGroundClick={handleGroundClick}
         interactive={!hasPredicted && !accidentOccurred}
+        roads={roads}
       />
     </div>
   );

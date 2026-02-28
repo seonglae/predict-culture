@@ -104,14 +104,11 @@ function ArenaContent() {
 
   const handleSimulationComplete = useCallback(async () => {
     if (!battleId) return;
-    flash(200);
-    shake(12, 600);
-
     setTimeout(async () => {
       await completeBattle({ battleId });
       setPhase("results");
-    }, 1500);
-  }, [battleId, completeBattle, flash, shake]);
+    }, 1000);
+  }, [battleId, completeBattle]);
 
   const handlePlayAgain = useCallback(() => {
     setBattleId(null);
@@ -185,15 +182,37 @@ function ArenaContent() {
                   transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
                 >
                   <h1
-                    className="text-[56px] md:text-[96px] lg:text-[120px] leading-[0.85] tracking-[0.04em] text-foreground/90 select-none font-bold"
+                    className="text-[56px] md:text-[96px] lg:text-[120px] leading-[0.85] tracking-[0.04em] select-none font-bold"
                     style={{ fontFamily: "var(--font-display), sans-serif" }}
                   >
-                    PREDICT
+                    <span className="hero-glaze">PREDICT</span>
                     <br />
-                    <span className="text-foreground/40">
-                      DRIVE
-                    </span>
+                    <span className="text-foreground">DRIVE</span>
                   </h1>
+                  <style jsx>{`
+                    .hero-glaze {
+                      background-image: linear-gradient(
+                        90deg,
+                        #e8e8e8, #a78bfa, #67e8f9, #f8f8f8,
+                        #f0abfc, #e8e8e8, #67e8f9, #e8e8e8
+                      );
+                      background-size: 300% 100%;
+                      -webkit-background-clip: text;
+                      -webkit-text-fill-color: transparent;
+                      animation: hero-shimmer 12s linear infinite;
+                    }
+                    :global(.dark) .hero-glaze {
+                      background-image: linear-gradient(
+                        90deg,
+                        #f0f0f0, #c4b5fd, #a5f3fc, #ffffff,
+                        #f5d0fe, #f0f0f0, #a5f3fc, #f0f0f0
+                      );
+                    }
+                    @keyframes hero-shimmer {
+                      0% { background-position: 300% 0; }
+                      100% { background-position: -300% 0; }
+                    }
+                  `}</style>
                 </motion.div>
 
                 <motion.p
@@ -244,6 +263,11 @@ function ArenaContent() {
                 showAccident={battle.status === "completed"}
                 cityName={city ?? undefined}
                 cityLabel={cityLabel}
+                roads={sceneConfig.roads}
+                flash={flash}
+                shake={shake}
+                lat={sceneConfig.lat}
+                lon={sceneConfig.lon}
               />
             </motion.div>
           )}

@@ -9,6 +9,7 @@ import type {
   VehicleSpawn,
   SceneConfig,
   Difficulty,
+  RoadSegment,
 } from "../lib/types";
 import {
   DIFFICULTY_CONFIG,
@@ -71,6 +72,7 @@ function hasConnection(type: TileType, dir: Dir): boolean {
 
 interface OSMWay {
   type: "road" | "water";
+  highway?: string;
   nodes: { lat: number; lon: number }[];
 }
 
@@ -131,6 +133,7 @@ out skel qt;
       const isWater = el.tags?.waterway !== undefined;
       ways.push({
         type: isWater ? "water" : "road",
+        highway: el.tags?.highway,
         nodes: wayNodes,
       });
     }
@@ -163,6 +166,86 @@ function latLonToGrid(
   const row = Math.floor(dz / metersPerTile + gridSize / 2);
 
   return { row, col };
+}
+
+/**
+ * Convert lat/lon to continuous world coordinates (x, z).
+ */
+function latLonToWorld(
+  lat: number,
+  lon: number,
+  centerLat: number,
+  centerLon: number,
+  gridSize: number,
+  tileSize: number,
+  metersPerTile: number
+): { x: number; z: number } {
+  const metersPerDegLat = 111320;
+  const metersPerDegLon = 111320 * Math.cos((centerLat * Math.PI) / 180);
+
+  const dx = (lon - centerLon) * metersPerDegLon;
+  const dz = (centerLat - lat) * metersPerDegLat;
+
+  // Convert meters to world units (same scale as grid tiles)
+  const worldX = (dx / metersPerTile) * tileSize;
+  const worldZ = (dz / metersPerTile) * tileSize;
+
+  return { x: worldX, z: worldZ };
+}
+
+/**
+ * Convert OSM road ways to world-coordinate polylines.
+ */
+function osmToRoadSegments(
+  ways: OSMWay[],
+  centerLat: number,
+  centerLon: number,
+  gridSize: number,
+  tileSize: number,
+  metersPerTile: number,
+  mapRadius: number
+): RoadSegment[] {
+  const roads: RoadSegment[] = [];
+
+  for (const way of ways) {
+    if (way.type !== "road") continue;
+
+    const points: { x: number; z: number }[] = [];
+    for (const node of way.nodes) {
+      const p = latLonToWorld(
+        node.lat,
+        node.lon,
+        centerLat,
+        centerLon,
+        gridSize,
+        tileSize,
+        metersPerTile
+      );
+      // Only include points within map bounds (with some margin)
+      if (
+        Math.abs(p.x) <= mapRadius * 1.1 &&
+        Math.abs(p.z) <= mapRadius * 1.1
+      ) {
+        points.push(p);
+      }
+    }
+
+    if (points.length < 2) continue;
+
+    let roadType: RoadSegment["type"] = "residential";
+    let width = 0.6;
+    if (way.highway === "primary" || way.highway === "trunk") {
+      roadType = "primary";
+      width = 1.2;
+    } else if (way.highway === "secondary" || way.highway === "tertiary") {
+      roadType = "secondary";
+      width = 0.9;
+    }
+
+    roads.push({ points, width, type: roadType });
+  }
+
+  return roads;
 }
 
 /**
@@ -343,7 +426,10 @@ function gridToSceneConfig(
   difficulty: Difficulty,
   seed: number,
   cityName: string,
-  cityLabel: string
+  cityLabel: string,
+  roads?: RoadSegment[],
+  lat?: number,
+  lon?: number
 ): SceneConfig {
   const rng = mulberry32(seed + 999);
   const config = DIFFICULTY_CONFIG[difficulty];
@@ -373,14 +459,12 @@ function gridToSceneConfig(
     }
   }
 
-  // Spawn vehicles on road tiles
-  const roadTiles = tiles.filter((t) => isRoad(t.type));
+  // Spawn vehicles
   const vehicleCount = randomInt(
     rng,
     config.vehicleRange[0],
     config.vehicleRange[1]
   );
-  const shuffledRoads = shuffle(rng, roadTiles);
 
   const vehicleTypes: ("car" | "truck" | "bus" | "motorcycle")[] = [
     "car",
@@ -392,39 +476,76 @@ function gridToSceneConfig(
   ];
 
   const vehicles: VehicleSpawn[] = [];
-  const usedPositions = new Set<string>();
 
-  for (let i = 0; i < vehicleCount && i < shuffledRoads.length; i++) {
-    const tile = shuffledRoads[i];
-    const posKey = `${tile.row},${tile.col}`;
-    if (usedPositions.has(posKey)) continue;
-    usedPositions.add(posKey);
+  if (roads && roads.length > 0) {
+    // Spawn vehicles at random positions along road segments
+    for (let i = 0; i < vehicleCount; i++) {
+      const road = roads[Math.floor(rng() * roads.length)];
+      if (road.points.length < 2) continue;
 
-    const vType = pick(rng, vehicleTypes);
-    const x = (tile.col - gridSize / 2) * tileSize + tileSize / 2;
-    const z = (tile.row - gridSize / 2) * tileSize + tileSize / 2;
+      // Pick a random segment along this road
+      const segIdx = Math.floor(rng() * (road.points.length - 1));
+      const t = rng(); // interpolation parameter
+      const p0 = road.points[segIdx];
+      const p1 = road.points[segIdx + 1];
 
-    let heading = 0;
-    if (tile.type === "road_straight_ns")
-      heading = rng() > 0.5 ? 0 : Math.PI;
-    else if (tile.type === "road_straight_ew")
-      heading = rng() > 0.5 ? Math.PI / 2 : -Math.PI / 2;
-    else {
-      const cardinals = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
-      heading = pick(rng, cardinals);
+      const x = p0.x + (p1.x - p0.x) * t;
+      const z = p0.z + (p1.z - p0.z) * t;
+
+      // Heading from road direction (tangent)
+      const heading = Math.atan2(p1.x - p0.x, -(p1.z - p0.z));
+
+      const vType = pick(rng, vehicleTypes);
+      vehicles.push({
+        id: `v${i}`,
+        type: vType,
+        x,
+        z,
+        heading,
+        speed: vType === "motorcycle" ? 3.5 + rng() * 3.5 : 2.5 + rng() * 3,
+        aggressiveness:
+          vType === "motorcycle" ? 0.6 + rng() * 0.4 : 0.3 + rng() * 0.7,
+        color: pick(rng, VEHICLE_COLORS),
+      });
     }
+  } else {
+    // Fallback: spawn on road tiles
+    const roadTiles = tiles.filter((t) => isRoad(t.type));
+    const shuffledRoads = shuffle(rng, roadTiles);
+    const usedPositions = new Set<string>();
 
-    vehicles.push({
-      id: `v${i}`,
-      type: vType,
-      x,
-      z,
-      heading,
-      speed: vType === "motorcycle" ? 3.5 + rng() * 3.5 : 2.5 + rng() * 3,
-      aggressiveness:
-        vType === "motorcycle" ? 0.6 + rng() * 0.4 : 0.3 + rng() * 0.7,
-      color: pick(rng, VEHICLE_COLORS),
-    });
+    for (let i = 0; i < vehicleCount && i < shuffledRoads.length; i++) {
+      const tile = shuffledRoads[i];
+      const posKey = `${tile.row},${tile.col}`;
+      if (usedPositions.has(posKey)) continue;
+      usedPositions.add(posKey);
+
+      const vType = pick(rng, vehicleTypes);
+      const x = (tile.col - gridSize / 2) * tileSize + tileSize / 2;
+      const z = (tile.row - gridSize / 2) * tileSize + tileSize / 2;
+
+      let heading = 0;
+      if (tile.type === "road_straight_ns")
+        heading = rng() > 0.5 ? 0 : Math.PI;
+      else if (tile.type === "road_straight_ew")
+        heading = rng() > 0.5 ? Math.PI / 2 : -Math.PI / 2;
+      else {
+        const cardinals = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
+        heading = pick(rng, cardinals);
+      }
+
+      vehicles.push({
+        id: `v${i}`,
+        type: vType,
+        x,
+        z,
+        heading,
+        speed: vType === "motorcycle" ? 3.5 + rng() * 3.5 : 2.5 + rng() * 3,
+        aggressiveness:
+          vType === "motorcycle" ? 0.6 + rng() * 0.4 : 0.3 + rng() * 0.7,
+        color: pick(rng, VEHICLE_COLORS),
+      });
+    }
   }
 
   // Flying vehicles for hard/hell
@@ -469,6 +590,9 @@ function gridToSceneConfig(
     mapRadius,
     cityName,
     cityLabel,
+    ...(roads && roads.length > 0 ? { roads } : {}),
+    ...(lat !== undefined ? { lat } : {}),
+    ...(lon !== undefined ? { lon } : {}),
   };
 }
 
@@ -495,13 +619,24 @@ export const generateMapFromOSM = internalAction({
     const metersPerTile = 50;
 
     // Pick a random city
-    const city = CITY_CONFIGS[Math.floor(rng() * CITY_CONFIGS.length)];
+    const cityBase = CITY_CONFIGS[Math.floor(rng() * CITY_CONFIGS.length)];
+
+    // Random offset within ~500m of city center so each game gets a different neighborhood
+    const metersPerDegLat = 111320;
+    const metersPerDegLon =
+      111320 * Math.cos((cityBase.lat * Math.PI) / 180);
+    const offsetMeters = 500;
+    const offsetLat = ((rng() - 0.5) * 2 * offsetMeters) / metersPerDegLat;
+    const offsetLon = ((rng() - 0.5) * 2 * offsetMeters) / metersPerDegLon;
+
+    const city = {
+      ...cityBase,
+      lat: cityBase.lat + offsetLat,
+      lon: cityBase.lon + offsetLon,
+    };
 
     // Compute bounding box
     const halfExtentMeters = (gridSize * metersPerTile) / 2;
-    const metersPerDegLat = 111320;
-    const metersPerDegLon =
-      111320 * Math.cos((city.lat * Math.PI) / 180);
     const dLat = halfExtentMeters / metersPerDegLat;
     const dLon = halfExtentMeters / metersPerDegLon;
 
@@ -539,6 +674,19 @@ export const generateMapFromOSM = internalAction({
       if (roadCount >= minRoads) {
         fixRoadConnectivity(grid, gridSize);
         fillNonRoadCells(grid, gridSize, rng);
+
+        // Extract real road geometry as polylines
+        const mapRadius = (gridSize * tileSize) / 2;
+        const roadSegments = osmToRoadSegments(
+          ways,
+          city.lat,
+          city.lon,
+          gridSize,
+          tileSize,
+          metersPerTile,
+          mapRadius
+        );
+
         scene = gridToSceneConfig(
           grid,
           gridSize,
@@ -546,7 +694,10 @@ export const generateMapFromOSM = internalAction({
           difficulty,
           mapSeed,
           city.name,
-          city.label
+          city.label,
+          roadSegments,
+          city.lat,
+          city.lon
         );
       } else {
         // Too few roads after rasterization — fallback
@@ -614,11 +765,13 @@ async function fallbackGenerate(
   battleId: any,
   mapSeed: number,
   difficulty: Difficulty,
-  city: { name: string; label: string }
+  city: { name: string; label: string; lat: number; lon: number }
 ): Promise<SceneConfig> {
   const { generateMap } = await import("../lib/mapGenerator");
   const scene = generateMap(mapSeed, difficulty);
   scene.cityName = city.name;
   scene.cityLabel = city.label;
+  scene.lat = city.lat;
+  scene.lon = city.lon;
   return scene;
 }
