@@ -19,7 +19,6 @@ interface BuildingsProps {
   tileSize: number;
 }
 
-// Ease-out back — nice overshoot "plop" on landing
 function easeOutBack(x: number): number {
   const c1 = 1.70158;
   const c3 = c1 + 1;
@@ -36,7 +35,6 @@ export function Buildings({ tiles, gridSize, tileSize }: BuildingsProps) {
     [tiles]
   );
 
-  // Staggered drop animation state
   const timeRef = useRef(0);
   const startedRef = useRef(false);
 
@@ -53,9 +51,7 @@ export function Buildings({ tiles, gridSize, tileSize }: BuildingsProps) {
         const x = (tile.col - gridSize / 2) * tileSize + tileSize / 2;
         const z = (tile.row - gridSize / 2) * tileSize + tileSize / 2;
         const height = tile.height ?? 2;
-        const color = tile.color ?? "#92b4c8";
-
-        // Stagger: center buildings drop first, edges last
+        const color = tile.color ?? "#a2d2ff";
         const dist = Math.sqrt(x * x + z * z);
         const delay = (dist / maxDist) * 0.8 + Math.random() * 0.1;
 
@@ -69,6 +65,7 @@ export function Buildings({ tiles, gridSize, tileSize }: BuildingsProps) {
             tileSize={tileSize}
             delay={delay}
             timeRef={timeRef}
+            buildingType={tile.type}
           />
         );
       })}
@@ -95,16 +92,17 @@ export function Buildings({ tiles, gridSize, tileSize }: BuildingsProps) {
 }
 
 function BuildingBlock({
-  x, z, height, color, tileSize, delay, timeRef,
+  x, z, height, color, tileSize, delay, timeRef, buildingType,
 }: {
   x: number; z: number; height: number; color: string;
   tileSize: number; delay: number;
   timeRef: React.RefObject<number>;
+  buildingType: string;
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const dropHeight = 25 + height;
   const dropDuration = 0.6;
-  const padding = 0.4;
+  const padding = 0.5;
   const buildingSize = tileSize - padding * 2;
 
   useFrame(() => {
@@ -113,40 +111,62 @@ function BuildingBlock({
     const progress = Math.max(0, Math.min(1, (elapsed - delay) / dropDuration));
     const easedY = progress >= 1 ? 0 : dropHeight * (1 - easeOutBack(progress));
     groupRef.current.position.y = easedY;
-    // Scale pop on landing
     const scaleProgress = Math.max(0, Math.min(1, (elapsed - delay - dropDuration * 0.8) / 0.15));
     const s = scaleProgress < 1 ? 0.95 + scaleProgress * 0.05 : 1;
     groupRef.current.scale.setScalar(s);
   });
 
+  const isTall = buildingType === "building_tall";
+  const isMedium = buildingType === "building_medium";
+
   return (
     <group ref={groupRef} position={[x, dropHeight, z]}>
-      {/* Main building body */}
+      {/* Main body — soft rounded box */}
       <RoundedBox
         args={[buildingSize, height, buildingSize]}
-        radius={0.3}
+        radius={isTall ? 0.2 : 0.35}
         smoothness={4}
         position={[0, height / 2, 0]}
         castShadow
         receiveShadow
       >
-        <meshStandardMaterial color={color} roughness={0.55} metalness={0.08} />
+        <meshStandardMaterial
+          color={color}
+          roughness={0.4}
+          metalness={0.05}
+        />
       </RoundedBox>
 
-      {/* Roof accent */}
+      {/* Roof — flat accent top */}
       <RoundedBox
-        args={[buildingSize - 0.3, 0.2, buildingSize - 0.3]}
-        radius={0.15}
+        args={[buildingSize - 0.2, 0.12, buildingSize - 0.2]}
+        radius={0.1}
         smoothness={4}
-        position={[0, height + 0.1, 0]}
+        position={[0, height + 0.06, 0]}
         castShadow
       >
-        <meshStandardMaterial color={color} roughness={0.45} metalness={0.12} toneMapped={false} />
+        <meshStandardMaterial
+          color={color}
+          roughness={0.35}
+          metalness={0.08}
+        />
       </RoundedBox>
 
-      {/* Windows */}
+      {/* Tall buildings get a darker accent band */}
+      {isTall && (
+        <RoundedBox
+          args={[buildingSize + 0.02, 0.15, buildingSize + 0.02]}
+          radius={0.08}
+          smoothness={2}
+          position={[0, height * 0.6, 0]}
+        >
+          <meshStandardMaterial color="white" roughness={0.3} transparent opacity={0.25} />
+        </RoundedBox>
+      )}
+
+      {/* Windows — minimal light dots */}
       {height > 2 && (
-        <WindowDots buildingSize={buildingSize} height={height} />
+        <WindowStrips buildingSize={buildingSize} height={height} isTall={isTall} />
       )}
     </group>
   );
@@ -171,57 +191,67 @@ function ParkTile({
 
   return (
     <group ref={groupRef} position={[x, dropHeight, z]}>
+      {/* Ground patch */}
       <RoundedBox
-        args={[tileSize - 0.4, 0.15, tileSize - 0.4]}
-        radius={0.1}
+        args={[tileSize - 0.4, 0.12, tileSize - 0.4]}
+        radius={0.08}
         smoothness={4}
-        position={[0, 0.075, 0]}
+        position={[0, 0.06, 0]}
         receiveShadow
       >
-        <meshStandardMaterial color="#a3c4a8" roughness={0.8} />
+        <meshStandardMaterial color="#b5ead7" roughness={0.7} />
       </RoundedBox>
 
-      <group position={[0, 0.15, 0]}>
-        <mesh position={[0, 0.3, 0]} castShadow>
-          <cylinderGeometry args={[0.08, 0.1, 0.6, 8]} />
-          <meshStandardMaterial color="#9e8b76" roughness={0.9} />
+      {/* Tree — minimal */}
+      <group position={[0, 0.12, 0]}>
+        <mesh position={[0, 0.25, 0]} castShadow>
+          <cylinderGeometry args={[0.06, 0.08, 0.5, 6]} />
+          <meshStandardMaterial color="#a8896c" roughness={0.9} />
         </mesh>
-        <mesh position={[0, 0.8, 0]} castShadow>
-          <sphereGeometry args={[0.5, 8, 8]} />
-          <meshStandardMaterial color="#6b9e6b" roughness={0.7} />
+        <mesh position={[0, 0.7, 0]} castShadow>
+          <sphereGeometry args={[0.45, 8, 8]} />
+          <meshStandardMaterial color="#7ec99a" roughness={0.6} />
         </mesh>
       </group>
     </group>
   );
 }
 
-function WindowDots({ buildingSize, height }: { buildingSize: number; height: number }) {
+// Clean window strips instead of individual dots (less draw calls)
+function WindowStrips({ buildingSize, height, isTall }: { buildingSize: number; height: number; isTall: boolean }) {
   const floors = Math.floor(height / 1.2);
-  const windowsPerFloor = Math.min(3, Math.floor(buildingSize / 0.8));
-  const windows: { x: number; y: number; z: number }[] = [];
+  const strips: { y: number }[] = [];
 
   for (let f = 0; f < floors; f++) {
-    const y = 0.8 + f * 1.2;
-    for (let w = 0; w < windowsPerFloor; w++) {
-      const offset = (w - (windowsPerFloor - 1) / 2) * 0.7;
-      windows.push({ x: offset, y, z: buildingSize / 2 + 0.01 });
-      windows.push({ x: offset, y, z: -(buildingSize / 2 + 0.01) });
-    }
+    strips.push({ y: 0.8 + f * 1.2 });
   }
 
   return (
     <>
-      {windows.map((w, i) => (
-        <mesh key={i} position={[w.x, w.y, w.z]}>
-          <planeGeometry args={[0.3, 0.3]} />
-          <meshStandardMaterial
-            color="#ffeaa7"
-            emissive="#ffeaa7"
-            emissiveIntensity={0.25}
-            transparent
-            opacity={0.75}
-          />
-        </mesh>
+      {strips.map((s, i) => (
+        <group key={i}>
+          {/* Front/back window strips */}
+          <mesh position={[0, s.y, buildingSize / 2 + 0.01]}>
+            <planeGeometry args={[buildingSize * 0.7, 0.25]} />
+            <meshStandardMaterial
+              color="#fffde7"
+              emissive="#fffde7"
+              emissiveIntensity={0.15}
+              transparent
+              opacity={0.6}
+            />
+          </mesh>
+          <mesh position={[0, s.y, -(buildingSize / 2 + 0.01)]}>
+            <planeGeometry args={[buildingSize * 0.7, 0.25]} />
+            <meshStandardMaterial
+              color="#fffde7"
+              emissive="#fffde7"
+              emissiveIntensity={0.15}
+              transparent
+              opacity={0.6}
+            />
+          </mesh>
+        </group>
       ))}
     </>
   );

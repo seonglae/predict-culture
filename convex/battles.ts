@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { generateMap } from "./lib/mapGenerator";
 import { generateSimulation } from "./lib/simulation";
+import type { SceneConfig } from "./lib/types";
 import { calculateScore } from "./lib/scoring";
 import { multiPlayerGlickoUpdate, type GlickoInput } from "./lib/elo";
 import type { Difficulty } from "./lib/types";
@@ -129,46 +130,59 @@ export const generateAndStartBattle = internalMutation({
     const battle = await ctx.db.get(battleId);
     if (!battle || battle.status !== "simulating") return;
 
-    const scene = generateMap(battle.mapSeed, battle.difficulty as Difficulty);
-    const simResult = generateSimulation(scene, battle.mapSeed);
+    // Schedule the async OSM fetch action — runs concurrently with globe animation on client
+    await ctx.scheduler.runAfter(0, internal.actions.fetchOSM.generateMapFromOSM, {
+      battleId,
+      mapSeed: battle.mapSeed,
+      difficulty: battle.difficulty,
+    });
+  },
+});
 
-    if (!simResult) {
-      // Failed to generate collision — try new seed
-      const newSeed = battle.mapSeed + 100000;
-      const newScene = generateMap(newSeed, battle.difficulty as Difficulty);
-      const retryResult = generateSimulation(newScene, newSeed);
+export const setGeneratedBattle = internalMutation({
+  args: {
+    battleId: v.id("battles"),
+    status: v.union(v.literal("active"), v.literal("cancelled")),
+    mapSeed: v.optional(v.number()),
+    sceneConfig: v.optional(v.any()),
+    simulationData: v.optional(v.any()),
+    accidentPoint: v.optional(v.object({ x: v.number(), z: v.number() })),
+    accidentTime: v.optional(v.number()),
+    accidentFrame: v.optional(v.number()),
+    totalFrames: v.optional(v.number()),
+    cityName: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const battle = await ctx.db.get(args.battleId);
+    if (!battle) return;
 
-      if (!retryResult) {
-        await ctx.db.patch(battleId, { status: "cancelled" });
-        return;
-      }
-
-      await ctx.db.patch(battleId, {
-        mapSeed: newSeed,
-        sceneConfig: newScene,
-        simulationData: retryResult.result.frames,
-        accidentPoint: retryResult.result.accidentPoint,
-        accidentTime: retryResult.result.accidentTime,
-        accidentFrame: retryResult.result.accidentFrame,
-        totalFrames: retryResult.result.totalFrames,
-        status: "active",
-      });
+    if (args.status === "cancelled") {
+      await ctx.db.patch(args.battleId, { status: "cancelled" });
       return;
     }
 
-    await ctx.db.patch(battleId, {
-      sceneConfig: scene,
-      simulationData: simResult.result.frames,
-      accidentPoint: simResult.result.accidentPoint,
-      accidentTime: simResult.result.accidentTime,
-      accidentFrame: simResult.result.accidentFrame,
-      totalFrames: simResult.result.totalFrames,
-      status: "active",
-    });
+    const patch: Record<string, any> = { status: "active" };
+    if (args.mapSeed !== undefined) patch.mapSeed = args.mapSeed;
+    if (args.sceneConfig !== undefined) patch.sceneConfig = args.sceneConfig;
+    if (args.simulationData !== undefined) patch.simulationData = args.simulationData;
+    if (args.accidentPoint !== undefined) patch.accidentPoint = args.accidentPoint;
+    if (args.accidentTime !== undefined) patch.accidentTime = args.accidentTime;
+    if (args.accidentFrame !== undefined) patch.accidentFrame = args.accidentFrame;
+    if (args.totalFrames !== undefined) patch.totalFrames = args.totalFrames;
+    if (args.cityName !== undefined) {
+      patch.cityName = args.cityName;
+    }
+
+    // Extract cityLabel from sceneConfig if available
+    if (args.sceneConfig?.cityLabel) {
+      patch.cityLabel = args.sceneConfig.cityLabel;
+    }
+
+    await ctx.db.patch(args.battleId, patch);
 
     // Schedule AI prediction
     await ctx.scheduler.runAfter(0, internal.battles.scheduleAIPrediction, {
-      battleId,
+      battleId: args.battleId,
     });
   },
 });

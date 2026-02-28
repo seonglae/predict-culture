@@ -42,8 +42,13 @@ function isRoad(type: TileType): boolean {
   return type.startsWith("road_");
 }
 
-function isBuilding(type: TileType): boolean {
-  return type.startsWith("building_");
+function isBlocker(type: TileType): boolean {
+  return (
+    type.startsWith("building_") ||
+    type === "water" ||
+    type === "river" ||
+    type === "forest"
+  );
 }
 
 // Build a fast lookup grid for tiles

@@ -12,10 +12,11 @@ import { NameEntryModal } from "@/components/arena/NameEntryModal";
 import { Matchmaking } from "@/components/arena/Matchmaking";
 import { BattleScene } from "@/components/arena/BattleScene";
 import { BattleResult } from "@/components/arena/BattleResult";
+import { GlobeTransition } from "@/components/arena/GlobeTransition";
 import { useBrowserFingerprint } from "@/hooks/useBrowserFingerprint";
 import { useTheme } from "@/components/ThemeProvider";
 
-type Phase = "name_entry" | "matchmaking" | "simulation" | "results";
+type Phase = "name_entry" | "matchmaking" | "globe_transition" | "simulation" | "results";
 type Difficulty = "easy" | "normal" | "hard" | "hell";
 
 const PREDICTION_COLORS = ["#00e5c7", "#f472b6", "#8b5cf6"];
@@ -56,11 +57,16 @@ function ArenaContent() {
     }
   }, [existingPlayer, playerName]);
 
+  // Transition: matchmaking → globe_transition when match starts simulating
   useEffect(() => {
     if (!battle) return;
-    if (battle.status === "active" && phase === "matchmaking") {
-      setPhase("simulation");
+    if (
+      (battle.status === "simulating" || battle.status === "active") &&
+      phase === "matchmaking"
+    ) {
+      setPhase("globe_transition");
     }
+    // If battle becomes active while in globe_transition, the globe's onComplete will transition to simulation
   }, [battle, phase]);
 
   const handleNameSubmit = useCallback(
@@ -141,8 +147,26 @@ function ArenaContent() {
     }));
   };
 
+  const handleGlobeComplete = useCallback(() => {
+    // If battle data is ready, go to simulation. Otherwise, wait.
+    if (battle?.status === "active") {
+      setPhase("simulation");
+    } else {
+      // Data not ready yet — poll until it is
+      const check = () => {
+        // The useEffect above will handle the transition once battle becomes active
+        // We just need to set a flag so the next status update triggers simulation
+        setPhase("simulation");
+      };
+      // Small delay to let data arrive
+      setTimeout(check, 500);
+    }
+  }, [battle]);
+
   const sceneConfig = battle?.sceneConfig as any;
   const simulationData = battle?.simulationData as any[];
+  const cityName = battle?.cityName as string | undefined;
+  const cityLabel = battle?.cityLabel as string | undefined;
 
   const showWaveField = phase === "name_entry" || phase === "matchmaking" || phase === "results";
 
@@ -154,11 +178,8 @@ function ArenaContent() {
       <main className="flex-1 pt-16">
         <AnimatePresence mode="wait">
           {phase === "name_entry" && (
-            <motion.div
+            <div
               key="name-entry"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
               className="flex-1 flex flex-col items-center justify-center min-h-[calc(100vh-4rem)]"
             >
               {/* Hero */}
@@ -169,12 +190,12 @@ function ArenaContent() {
                   transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
                 >
                   <h1
-                    className="text-[72px] md:text-[120px] lg:text-[150px] leading-[0.85] tracking-[0.02em] text-foreground/90 select-none"
+                    className="text-[56px] md:text-[96px] lg:text-[120px] leading-[0.85] tracking-[0.04em] text-foreground/90 select-none font-bold"
                     style={{ fontFamily: "var(--font-display), sans-serif" }}
                   >
-                    SENTINEL
+                    PREDICT
                     <br />
-                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent-teal to-accent-pink">
+                    <span className="text-foreground/40">
                       DRIVE
                     </span>
                   </h1>
@@ -190,22 +211,23 @@ function ArenaContent() {
                 </motion.p>
               </div>
 
-              {/* Entry form */}
-              <motion.div
-                initial={{ y: 40, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.6, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-              >
-                <NameEntryModal
-                  onSubmit={handleNameSubmit}
-                  initialName={existingPlayer?.name ?? ""}
-                />
-              </motion.div>
-            </motion.div>
+              <NameEntryModal
+                onSubmit={handleNameSubmit}
+                initialName={existingPlayer?.name ?? ""}
+              />
+            </div>
           )}
 
           {phase === "matchmaking" && (
-            <Matchmaking key="matchmaking" />
+            <Matchmaking key="matchmaking" showGlobe />
+          )}
+
+          {phase === "globe_transition" && (
+            <GlobeTransition
+              key="globe"
+              selectedCity={cityName ?? "New York"}
+              onComplete={handleGlobeComplete}
+            />
           )}
 
           {phase === "simulation" && sceneConfig && simulationData && battle && (
@@ -228,6 +250,8 @@ function ArenaContent() {
                 onSimulationComplete={handleSimulationComplete}
                 predictions={buildPredictionMarkers()}
                 showAccident={battle.status === "completed"}
+                cityName={cityName}
+                cityLabel={cityLabel}
               />
             </motion.div>
           )}

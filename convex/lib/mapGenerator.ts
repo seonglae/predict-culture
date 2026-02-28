@@ -310,5 +310,6 @@ export function generateMap(
     tiles,
     vehicles,
     mapRadius,
+    cityName,
   };
 }
