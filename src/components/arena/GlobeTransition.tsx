@@ -32,8 +32,8 @@ function ZoomGlobeScene({ selectedCity, onComplete }: GlobeTransitionProps) {
     [selectedCity]
   );
 
-  // Orient globe so the selected city faces camera on mount
-  const initialRotationY = useMemo(() => {
+  // Target rotation so selected city faces camera
+  const targetRotationY = useMemo(() => {
     const theta = (targetCity.lon + 180) * (Math.PI / 180);
     return -theta + Math.PI;
   }, [targetCity]);
@@ -53,25 +53,27 @@ function ZoomGlobeScene({ selectedCity, onComplete }: GlobeTransitionProps) {
     elapsedRef.current += delta;
     const t = elapsedRef.current;
 
-    // Set initial rotation to face city
-    if (t < 0.05) {
-      groupRef.current.rotation.y = initialRotationY;
-    }
+    const rotateDuration = 1.5;
+    const zoomStart = rotateDuration;
+    const zoomDuration = 2.0;
 
-    // 0-2.5s: zoom camera toward the globe surface
-    const zoomDuration = 2.5;
-    if (t < zoomDuration) {
-      const progress = t / zoomDuration;
-      // Ease out cubic
-      const eased = 1 - Math.pow(1 - progress, 3);
+    if (t < rotateDuration) {
+      // Phase 1: smoothly rotate globe to face the city
+      const progress = Math.min(1, t / rotateDuration);
+      const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+      groupRef.current.rotation.y = eased * targetRotationY;
+    } else if (t < zoomStart + zoomDuration) {
+      // Phase 2: lock rotation, zoom camera in
+      groupRef.current.rotation.y = targetRotationY;
+      const zoomProgress = (t - zoomStart) / zoomDuration;
+      const eased = 1 - Math.pow(1 - zoomProgress, 3);
       camera.position.z = 5 - eased * 4.2;
-      // Slight upward tilt based on city latitude
       const latRad = targetCity.lat * (Math.PI / 180);
       camera.position.y = eased * Math.sin(latRad) * 0.8;
     }
 
     // Done
-    if (t > zoomDuration + 0.3 && !completedRef.current) {
+    if (t > zoomStart + zoomDuration + 0.3 && !completedRef.current) {
       completedRef.current = true;
       onComplete();
     }
