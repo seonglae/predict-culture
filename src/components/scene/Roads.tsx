@@ -44,11 +44,11 @@ export function Roads({ tiles, gridSize, tileSize }: RoadsProps) {
           >
             <planeGeometry args={[tileSize, tileSize]} />
             <meshStandardMaterial
-              color="#7ec8e3"
-              roughness={0.2}
+              color="#4a7c8f"
+              roughness={0.15}
               metalness={0.1}
               transparent
-              opacity={0.85}
+              opacity={0.9}
             />
           </mesh>
         );
@@ -58,38 +58,47 @@ export function Roads({ tiles, gridSize, tileSize }: RoadsProps) {
       {roadTiles.map((tile, i) => {
         const x = (tile.col - gridSize / 2) * tileSize + tileSize / 2;
         const z = (tile.row - gridSize / 2) * tileSize + tileSize / 2;
+        const isIntersection = tile.type === "road_intersection" || tile.type.startsWith("road_t_");
 
         return (
           <group key={i} position={[x, 0, z]}>
-            {/* Road surface — rounded edges for cute look */}
+            {/* Asphalt surface — dark gray */}
             <mesh receiveShadow position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-              <planeGeometry args={[tileSize - 0.1, tileSize - 0.1]} />
-              <meshStandardMaterial
-                color="#e0e0e0"
-                roughness={0.8}
-              />
+              <planeGeometry args={[tileSize, tileSize]} />
+              <meshStandardMaterial color="#3a3a3e" roughness={0.85} metalness={0.02} />
             </mesh>
 
-            {/* Lane markings */}
-            {(tile.type === "road_straight_ns" ||
-              tile.type === "road_intersection" ||
-              tile.type.startsWith("road_t_")) && (
-              <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                <planeGeometry args={[0.1, tileSize * 0.6]} />
-                <meshStandardMaterial color="#ffffff" opacity={0.5} transparent />
-              </mesh>
+            {/* Center lane markings — white dashed for straights */}
+            {tile.type === "road_straight_ns" && (
+              <>
+                <mesh position={[0, 0.015, -tileSize * 0.2]} rotation={[-Math.PI / 2, 0, 0]}>
+                  <planeGeometry args={[0.08, tileSize * 0.25]} />
+                  <meshBasicMaterial color="#ffffff" transparent opacity={0.7} />
+                </mesh>
+                <mesh position={[0, 0.015, tileSize * 0.2]} rotation={[-Math.PI / 2, 0, 0]}>
+                  <planeGeometry args={[0.08, tileSize * 0.25]} />
+                  <meshBasicMaterial color="#ffffff" transparent opacity={0.7} />
+                </mesh>
+              </>
             )}
-            {(tile.type === "road_straight_ew" ||
-              tile.type === "road_intersection" ||
-              tile.type.startsWith("road_t_")) && (
-              <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-                <planeGeometry args={[tileSize * 0.6, 0.1]} />
-                <meshStandardMaterial color="#ffffff" opacity={0.5} transparent />
-              </mesh>
+            {tile.type === "road_straight_ew" && (
+              <>
+                <mesh position={[-tileSize * 0.2, 0.015, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                  <planeGeometry args={[tileSize * 0.25, 0.08]} />
+                  <meshBasicMaterial color="#ffffff" transparent opacity={0.7} />
+                </mesh>
+                <mesh position={[tileSize * 0.2, 0.015, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                  <planeGeometry args={[tileSize * 0.25, 0.08]} />
+                  <meshBasicMaterial color="#ffffff" transparent opacity={0.7} />
+                </mesh>
+              </>
             )}
 
-            {/* Sidewalk curbs — cute rounded bumps */}
-            <RoadCurbs type={tile.type} tileSize={tileSize} />
+            {/* Crosswalk stripes at intersections */}
+            {isIntersection && <Crosswalk tileSize={tileSize} />}
+
+            {/* Sidewalk / curb edges */}
+            <RoadEdges type={tile.type} tileSize={tileSize} />
           </group>
         );
       })}
@@ -97,33 +106,62 @@ export function Roads({ tiles, gridSize, tileSize }: RoadsProps) {
   );
 }
 
-function RoadCurbs({ type, tileSize }: { type: string; tileSize: number }) {
-  const curbHeight = 0.15;
-  const curbWidth = 0.3;
+function Crosswalk({ tileSize }: { tileSize: number }) {
+  const stripes = 4;
+  const stripeWidth = 0.12;
+  const gap = 0.18;
   const hs = tileSize / 2;
-
-  // Place curbs on non-road edges
-  const curbs: { pos: [number, number, number]; scale: [number, number, number] }[] = [];
-
-  const addCurb = (x: number, z: number, sx: number, sz: number) => {
-    curbs.push({ pos: [x, curbHeight / 2, z], scale: [sx, curbHeight, sz] });
-  };
-
-  if (!type.includes("north") && type !== "road_straight_ns" && type !== "road_intersection" &&
-      type !== "road_curve_ne" && type !== "road_curve_nw" && type !== "road_t_east" && type !== "road_t_west") {
-    addCurb(0, -hs + curbWidth / 2, tileSize, curbWidth);
-  }
-  if (!type.includes("south") && type !== "road_straight_ns" && type !== "road_intersection" &&
-      type !== "road_curve_se" && type !== "road_curve_sw" && type !== "road_t_east" && type !== "road_t_west") {
-    addCurb(0, hs - curbWidth / 2, tileSize, curbWidth);
-  }
 
   return (
     <>
-      {curbs.map((c, i) => (
-        <mesh key={i} position={c.pos} castShadow>
-          <boxGeometry args={c.scale} />
-          <meshStandardMaterial color="#d4d4d8" roughness={0.9} />
+      {/* North edge crosswalk */}
+      {Array.from({ length: stripes }).map((_, i) => (
+        <mesh key={`n${i}`} position={[(i - (stripes - 1) / 2) * gap, 0.016, -hs + 0.35]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[stripeWidth, 0.5]} />
+          <meshBasicMaterial color="#ffffff" transparent opacity={0.75} />
+        </mesh>
+      ))}
+      {/* East edge crosswalk */}
+      {Array.from({ length: stripes }).map((_, i) => (
+        <mesh key={`e${i}`} position={[hs - 0.35, 0.016, (i - (stripes - 1) / 2) * gap]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[0.5, stripeWidth]} />
+          <meshBasicMaterial color="#ffffff" transparent opacity={0.75} />
+        </mesh>
+      ))}
+    </>
+  );
+}
+
+function RoadEdges({ type, tileSize }: { type: string; tileSize: number }) {
+  const edgeH = 0.1;
+  const edgeW = 0.15;
+  const hs = tileSize / 2;
+
+  const edges: { pos: [number, number, number]; scale: [number, number, number] }[] = [];
+  const add = (x: number, z: number, sx: number, sz: number) => {
+    edges.push({ pos: [x, edgeH / 2, z], scale: [sx, edgeH, sz] });
+  };
+
+  // Place curb on non-connecting edges
+  const isNS = type === "road_straight_ns";
+  const isEW = type === "road_straight_ew";
+  const isInt = type === "road_intersection" || type.startsWith("road_t_");
+
+  if (isNS) {
+    add(-hs + edgeW / 2, 0, edgeW, tileSize);
+    add(hs - edgeW / 2, 0, edgeW, tileSize);
+  } else if (isEW) {
+    add(0, -hs + edgeW / 2, tileSize, edgeW);
+    add(0, hs - edgeW / 2, tileSize, edgeW);
+  }
+  // Intersections and T-junctions don't get curbs (open sides)
+
+  return (
+    <>
+      {edges.map((e, i) => (
+        <mesh key={i} position={e.pos}>
+          <boxGeometry args={e.scale} />
+          <meshStandardMaterial color="#6b6b6b" roughness={0.9} />
         </mesh>
       ))}
     </>

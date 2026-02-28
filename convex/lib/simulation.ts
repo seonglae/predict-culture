@@ -569,7 +569,8 @@ export function runSimulation(
     }
 
     // Collision detection — ground vehicles only
-    if (!accidentPoint) {
+    // Warm-up: no crashes in the first 3 seconds so vehicles can spread out
+    if (!accidentPoint && time > 3.0) {
       for (let i = 0; i < vehicles.length; i++) {
         if (vehicles[i].state === "crashed" || vehicles[i].flying) continue;
         for (let j = i + 1; j < vehicles.length; j++) {
