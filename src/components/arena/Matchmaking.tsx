@@ -48,7 +48,8 @@ function GlobeScene({
   const GLOBE_RADIUS = 1.2;
 
   useFrame((_, delta) => {
-    if (!opponentFound) {
+    // Once fly started, NEVER go back to spinning — even if props flicker
+    if (!flyStartedRef.current && !opponentFound) {
       spinAngleRef.current += delta * 0.3;
       const angle = spinAngleRef.current;
       const r = 5;
@@ -61,18 +62,15 @@ function GlobeScene({
       return;
     }
 
-    // First frame after opponentFound — lock start + end positions
+    // Lock start + end positions once — never changes
     if (!flyStartedRef.current) {
       flyStartedRef.current = true;
-
-      // Capture current camera position
       const pos = camera.position;
       const r = pos.length();
       const phi = Math.acos(pos.y / r);
       const theta = Math.atan2(pos.x, pos.z);
       startCoordsRef.current = { r, phi, theta };
 
-      // Lock the target city at this moment
       const city = CITIES.find((c) => c.name === selectedCity) ?? CITIES[0];
       endCoordsRef.current = {
         r: GLOBE_RADIUS + 0.4,
@@ -87,7 +85,6 @@ function GlobeScene({
     const duration = 2.5;
     const progress = easeInOut(Math.min(1, flyElapsedRef.current / duration));
 
-    // Shortest path for theta
     let dTheta = end.theta - start.theta;
     if (dTheta > Math.PI) dTheta -= Math.PI * 2;
     if (dTheta < -Math.PI) dTheta += Math.PI * 2;
@@ -124,15 +121,11 @@ export function Matchmaking({
   onFlyComplete,
 }: MatchmakingProps) {
   const [countdown, setCountdown] = useState(5);
-  const [timedOut, setTimedOut] = useState(false);
 
   const cityInfo = useMemo(
     () => CITIES.find((c) => c.name === selectedCity),
     [selectedCity]
   );
-
-  // Countdown → 0 means start with AI, trigger fly immediately
-  const shouldFly = opponentFound || timedOut;
 
   useEffect(() => {
     if (opponentFound) return;
@@ -140,7 +133,6 @@ export function Matchmaking({
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
-          setTimedOut(true);
           onTimeout?.();
           return 0;
         }
@@ -157,14 +149,14 @@ export function Matchmaking({
         style={{ position: "absolute", inset: 0 }}
       >
         <GlobeScene
-          opponentFound={shouldFly}
+          opponentFound={opponentFound}
           selectedCity={selectedCity}
           onFlyComplete={onFlyComplete}
         />
       </Canvas>
 
       <div className="absolute inset-x-0 bottom-16 z-10 pointer-events-none">
-        {shouldFly && cityInfo ? (
+        {opponentFound && cityInfo ? (
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
