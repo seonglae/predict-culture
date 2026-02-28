@@ -168,7 +168,7 @@ function ArenaContent() {
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
                 >
-                  <h1 className="text-[72px] md:text-[120px] lg:text-[150px] font-black leading-[0.85] tracking-[-0.05em] text-foreground/90 select-none">
+                  <h1 className="text-[72px] md:text-[120px] lg:text-[150px] font-black leading-[0.85] tracking-[-0.04em] text-foreground/90 select-none" style={{ fontFamily: "var(--font-syne), sans-serif" }}>
                     SENTINEL
                     <br />
                     <span className="text-transparent bg-clip-text bg-gradient-to-r from-accent-teal via-accent-purple to-accent-pink">
