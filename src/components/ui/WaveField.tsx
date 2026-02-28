@@ -322,8 +322,7 @@ export function WaveField() {
   return (
     <canvas
       ref={canvasRef}
-      className="fixed inset-0"
-      style={{ zIndex: -1 }}
+      className="fixed inset-0 z-0"
     />
   );
 }

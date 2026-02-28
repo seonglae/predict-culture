@@ -175,7 +175,7 @@ function ArenaContent() {
       {showWaveField && <WaveField />}
       <Header />
 
-      <main className="flex-1 pt-16">
+      <main className="flex-1 pt-16 relative z-10">
         <AnimatePresence mode="wait">
           {phase === "name_entry" && (
             <div

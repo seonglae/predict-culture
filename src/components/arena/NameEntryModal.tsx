@@ -28,7 +28,13 @@ export function NameEntryModal({ onSubmit, initialName = "" }: NameEntryModalPro
 
   return (
     <div className="w-full max-w-sm mx-4">
-      <div className="entry-card relative rounded-3xl overflow-hidden">
+      <div
+        className="entry-card relative rounded-3xl"
+        style={{
+          backdropFilter: "blur(4px)",
+          WebkitBackdropFilter: "blur(4px)",
+        }}
+      >
         <div className="relative z-10 p-7">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
