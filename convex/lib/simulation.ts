@@ -274,51 +274,68 @@ export function runSimulation(
       const { row, col } = worldToGrid(v.x, v.z, gridSize, tileSize);
       const tile = getTileFromGrid(tileGrid, row, col, gridSize);
 
-      // If somehow off-road, steer back to nearest road
+      // If somehow off-road, teleport back to nearest road center
       if (!tile || !isRoad(tile.type)) {
-        // Find nearest road tile
         let bestDist = Infinity;
-        let bestCenter: { x: number; z: number } | null = null;
-        for (let dr = -2; dr <= 2; dr++) {
-          for (let dc = -2; dc <= 2; dc++) {
-            const nt = getTileFromGrid(
-              tileGrid,
-              row + dr,
-              col + dc,
-              gridSize
-            );
+        let bestTile: Tile | null = null;
+        for (let dr = -3; dr <= 3; dr++) {
+          for (let dc = -3; dc <= 3; dc++) {
+            const nt = getTileFromGrid(tileGrid, row + dr, col + dc, gridSize);
             if (nt && isRoad(nt.type)) {
               const c = tileCenterWorld(nt, gridSize, tileSize);
               const d = (c.x - v.x) ** 2 + (c.z - v.z) ** 2;
               if (d < bestDist) {
                 bestDist = d;
-                bestCenter = c;
+                bestTile = nt;
               }
             }
           }
         }
-        if (bestCenter) {
-          // Steer toward nearest road
-          const dx = bestCenter.x - v.x;
-          const dz = bestCenter.z - v.z;
-          v.heading = Math.atan2(dx, -dz);
-          v.speed = v.targetSpeed * 0.5;
+        if (bestTile) {
+          const c = tileCenterWorld(bestTile, gridSize, tileSize);
+          v.x = c.x;
+          v.z = c.z;
+          // Align heading to the road direction
+          const conn = getRoadConnections(bestTile.type);
+          if (conn.north || conn.south) v.heading = conn.north ? 0 : Math.PI;
+          else if (conn.east || conn.west) v.heading = conn.east ? Math.PI / 2 : -Math.PI / 2;
         }
+        continue; // skip rest of this vehicle's update
       }
 
-      // Road-center attraction — keep vehicles on the road
-      if (tile && isRoad(tile.type)) {
+      // Road-center attraction — strong lateral centering perpendicular to heading
+      {
         const center = tileCenterWorld(tile, gridSize, tileSize);
-        const dx = center.x - v.x;
-        const dz = center.z - v.z;
-        const distToCenter = Math.sqrt(dx * dx + dz * dz);
+        // Perpendicular to heading direction
+        const perpX = Math.cos(v.heading);
+        const perpZ = -Math.sin(v.heading);
+        // Distance from center projected onto perpendicular axis
+        const dx = v.x - center.x;
+        const dz = v.z - center.z;
+        const lateralDist = dx * perpX + dz * perpZ;
+        // Pull toward center lane (allow small lane offset)
+        const targetLateral = v.laneOffset * 0.3;
+        const correction = (targetLateral - lateralDist) * 0.08;
+        v.x += perpX * correction;
+        v.z += perpZ * correction;
+      }
 
-        // If drifting too far from road center, pull back
-        if (distToCenter > halfTile * 0.7) {
-          const pullStrength = 0.15;
-          v.x += dx * pullStrength * dt * 4;
-          v.z += dz * pullStrength * dt * 4;
-        }
+      // Straight road heading correction — keep aligned to road axis
+      if (tile.type === "road_straight_ns") {
+        // Should be heading north (0) or south (PI)
+        const targetH = Math.abs(v.heading) < Math.PI / 2 ? 0 : Math.PI;
+        let diff = targetH - v.heading;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        v.heading += diff * 0.15;
+      } else if (tile.type === "road_straight_ew") {
+        // Should be heading east (PI/2) or west (-PI/2)
+        const h = ((v.heading % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+        const targetH = h < Math.PI ? Math.PI / 2 : -Math.PI / 2;
+        let diff = targetH - v.heading;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        v.heading += diff * 0.15;
       }
 
       // Intersection / junction decision
@@ -479,31 +496,45 @@ export function runSimulation(
       );
       const newTile = getTileFromGrid(tileGrid, newRow, newCol, gridSize);
 
-      if (newTile && (isRoad(newTile.type) || newTile.type === "park")) {
-        // Safe — allow movement
+      if (newTile && isRoad(newTile.type)) {
+        // On road — allow movement
         v.x = newX;
         v.z = newZ;
-      } else if (newTile && isBuilding(newTile.type)) {
-        // BUILDING COLLISION — bounce back and reverse heading
-        v.heading += Math.PI + (rng() - 0.5) * 0.5;
-        v.speed = v.targetSpeed * 0.3;
-        v.state = "braking";
-        v.turnTimer = 0.5;
-      } else if (!newTile) {
-        // Edge of map — wrap or bounce
-        const halfMap = (gridSize * tileSize) / 2;
-        if (Math.abs(newX) > halfMap || Math.abs(newZ) > halfMap) {
-          // Reverse direction
-          v.heading += Math.PI;
-          v.speed = v.targetSpeed * 0.5;
-        } else {
-          v.x = newX;
-          v.z = newZ;
-        }
       } else {
-        // Unknown tile (park, empty) — allow but slow down
-        v.x = newX;
-        v.z = newZ;
+        // Would go off-road (building, park, edge, empty)
+        // Don't move — just keep position, slow down, wait for next intersection turn
+        v.speed *= 0.9;
+        // If completely stuck (speed near zero), try to find a valid direction
+        if (v.speed < 0.3) {
+          const conn = getRoadConnections(tile.type);
+          const currentDir = headingToDir(v.heading);
+          const opposite: Record<string, "north" | "south" | "east" | "west"> = {
+            north: "south", south: "north", east: "west", west: "east",
+          };
+          // Try any connected direction except where we're going (which is blocked)
+          const altDirs = (["north", "south", "east", "west"] as const).filter(
+            d => conn[d] && d !== currentDir
+          );
+          if (altDirs.length > 0) {
+            // Pick a non-U-turn if possible
+            const nonUturn = altDirs.filter(d => d !== opposite[currentDir]);
+            const chosen = nonUturn.length > 0
+              ? nonUturn[Math.floor(rng() * nonUturn.length)]
+              : altDirs[Math.floor(rng() * altDirs.length)];
+            v.heading = dirToHeading(chosen);
+            v.speed = v.targetSpeed * 0.5;
+            v.state = "turning";
+            v.turnTimer = 0.4;
+            // Snap to center for clean turn
+            const center = tileCenterWorld(tile, gridSize, tileSize);
+            v.x = center.x;
+            v.z = center.z;
+          } else {
+            // Dead end — U-turn as last resort
+            v.heading = dirToHeading(opposite[currentDir]);
+            v.speed = v.targetSpeed * 0.3;
+          }
+        }
       }
 
       // Proximity braking — slow down if another vehicle is ahead

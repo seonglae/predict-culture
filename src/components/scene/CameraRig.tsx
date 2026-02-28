@@ -11,8 +11,8 @@ export function CameraRig({ mapSize }: CameraRigProps) {
   const { camera } = useThree();
 
   useEffect(() => {
-    const height = mapSize * 1.2;
-    const distance = mapSize * 0.8;
+    const height = mapSize * 2;
+    const distance = mapSize * 1.2;
     camera.position.set(0, height, distance);
     camera.lookAt(0, 0, 0);
     camera.updateProjectionMatrix();

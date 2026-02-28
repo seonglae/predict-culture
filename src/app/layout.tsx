@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Syne } from "next/font/google";
+import { Inter, Staatliches } from "next/font/google";
 import { ConvexClientProvider } from "./ConvexClientProvider";
 import ThemeProvider from "@/components/ThemeProvider";
 import "./globals.css";
@@ -9,10 +9,10 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
-const syne = Syne({
+const staatliches = Staatliches({
   subsets: ["latin"],
-  variable: "--font-syne",
-  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-display",
+  weight: "400",
 });
 
 export const metadata: Metadata = {
@@ -40,7 +40,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`${inter.variable} ${syne.variable} font-sans antialiased bg-background text-foreground`}>
+      <body className={`${inter.variable} ${staatliches.variable} font-sans antialiased bg-background text-foreground`}>
         <ThemeProvider>
           <ConvexClientProvider>{children}</ConvexClientProvider>
         </ThemeProvider>
