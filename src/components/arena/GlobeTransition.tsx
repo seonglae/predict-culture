@@ -113,13 +113,7 @@ export function GlobeTransition({ selectedCity, onComplete }: GlobeTransitionPro
   );
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.4 }}
-      className="fixed inset-0 z-50 bg-[#030308]"
-    >
+    <div className="fixed inset-0 z-50 bg-[#030308]">
       <Canvas
         camera={{ position: [0, 0, 5], fov: 45 }}
         style={{ position: "absolute", inset: 0 }}
@@ -146,6 +140,6 @@ export function GlobeTransition({ selectedCity, onComplete }: GlobeTransitionPro
           </p>
         </motion.div>
       )}
-    </motion.div>
+    </div>
   );
 }
