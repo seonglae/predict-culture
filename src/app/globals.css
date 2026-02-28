@@ -142,11 +142,13 @@ html, body {
 }
 
 .entry-submit {
-  background: rgba(0, 229, 199, 0.08);
-  border: 1px solid rgba(0, 229, 199, 0.12);
+  background: rgba(0, 229, 199, 0.15);
+  border: 1px solid rgba(0, 229, 199, 0.25);
 }
 .entry-submit:hover:not(:disabled) {
-  box-shadow: 0 0 24px rgba(0, 229, 199, 0.08);
+  background: rgba(0, 229, 199, 0.22);
+  border-color: rgba(0, 229, 199, 0.35);
+  box-shadow: 0 0 30px rgba(0, 229, 199, 0.12);
 }
 
 /* Animations */
