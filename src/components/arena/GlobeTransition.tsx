@@ -21,22 +21,41 @@ interface GlobeTransitionProps {
   onComplete: () => void;
 }
 
-function ZoomGlobeScene({ selectedCity, onComplete }: GlobeTransitionProps) {
-  const groupRef = useRef<THREE.Group>(null);
+/** Ease in-out cubic */
+function easeInOut(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+/**
+ * Camera flies from start position to just above the city on the globe.
+ * Globe stays completely still — only the camera moves (like Google Earth).
+ * Uses spherical coordinate interpolation so the camera follows the globe curvature.
+ */
+function FlyToScene({ selectedCity, onComplete }: GlobeTransitionProps) {
   const elapsedRef = useRef(0);
   const completedRef = useRef(false);
   const { camera } = useThree();
+
+  const GLOBE_RADIUS = 2;
 
   const targetCity = useMemo(
     () => CITIES.find((c) => c.name === selectedCity) ?? CITIES[0],
     [selectedCity]
   );
 
-  // Target rotation so selected city faces camera (+z axis)
-  // With new coords: lon=0 faces +z, so rotate by -lon to bring city to front
-  const targetRotationY = useMemo(() => {
-    return -targetCity.lon * (Math.PI / 180);
-  }, [targetCity]);
+  // Start camera spherical: r=5, looking from front (lon=0, lat=0)
+  const startSpherical = useMemo(() => ({
+    r: 5,
+    phi: Math.PI / 2,   // equator (colatitude: 90° = equator)
+    theta: 0,            // lon=0 faces +z
+  }), []);
+
+  // End camera spherical: just above the city
+  const endSpherical = useMemo(() => ({
+    r: GLOBE_RADIUS + 0.4,  // close to surface
+    phi: (90 - targetCity.lat) * (Math.PI / 180),  // colatitude
+    theta: targetCity.lon * (Math.PI / 180),        // longitude
+  }), [targetCity]);
 
   const cityMarkers = useMemo(
     () =>
@@ -49,31 +68,30 @@ function ZoomGlobeScene({ selectedCity, onComplete }: GlobeTransitionProps) {
   );
 
   useFrame((_, delta) => {
-    if (!groupRef.current) return;
     elapsedRef.current += delta;
     const t = elapsedRef.current;
+    const duration = 3.0;
 
-    const rotateDuration = 1.5;
-    const zoomStart = rotateDuration;
-    const zoomDuration = 2.0;
+    if (t < duration) {
+      const progress = easeInOut(Math.min(1, t / duration));
 
-    if (t < rotateDuration) {
-      // Phase 1: smoothly rotate globe to face the city
-      const progress = Math.min(1, t / rotateDuration);
-      const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
-      groupRef.current.rotation.y = eased * targetRotationY;
-    } else if (t < zoomStart + zoomDuration) {
-      // Phase 2: lock rotation, zoom camera in
-      groupRef.current.rotation.y = targetRotationY;
-      const zoomProgress = (t - zoomStart) / zoomDuration;
-      const eased = 1 - Math.pow(1 - zoomProgress, 3);
-      camera.position.z = 5 - eased * 4.2;
-      const latRad = targetCity.lat * (Math.PI / 180);
-      camera.position.y = eased * Math.sin(latRad) * 0.8;
+      // Interpolate spherical coordinates
+      const r = startSpherical.r + (endSpherical.r - startSpherical.r) * progress;
+      const phi = startSpherical.phi + (endSpherical.phi - startSpherical.phi) * progress;
+      const theta = startSpherical.theta + (endSpherical.theta - startSpherical.theta) * progress;
+
+      // Convert spherical to Cartesian (same convention as latLonToVec3)
+      camera.position.set(
+        r * Math.sin(phi) * Math.sin(theta),
+        r * Math.cos(phi),
+        r * Math.sin(phi) * Math.cos(theta)
+      );
+
+      // Always look at globe center
+      camera.lookAt(0, 0, 0);
     }
 
-    // Done
-    if (t > zoomStart + zoomDuration + 0.3 && !completedRef.current) {
+    if (t > duration + 0.5 && !completedRef.current) {
       completedRef.current = true;
       onComplete();
     }
@@ -81,10 +99,9 @@ function ZoomGlobeScene({ selectedCity, onComplete }: GlobeTransitionProps) {
 
   return (
     <GeoGlobe
-      radius={2}
+      radius={GLOBE_RADIUS}
       spinSpeed={0}
       cities={cityMarkers}
-      groupRef={groupRef}
     />
   );
 }
@@ -107,7 +124,7 @@ export function GlobeTransition({ selectedCity, onComplete }: GlobeTransitionPro
         camera={{ position: [0, 0, 5], fov: 45 }}
         style={{ position: "absolute", inset: 0 }}
       >
-        <ZoomGlobeScene selectedCity={selectedCity} onComplete={onComplete} />
+        <FlyToScene selectedCity={selectedCity} onComplete={onComplete} />
       </Canvas>
 
       {/* City name */}
@@ -115,7 +132,7 @@ export function GlobeTransition({ selectedCity, onComplete }: GlobeTransitionPro
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.3 }}
+          transition={{ duration: 0.6, delay: 0.5 }}
           className="absolute bottom-20 left-0 right-0 text-center pointer-events-none z-10"
         >
           <h2
