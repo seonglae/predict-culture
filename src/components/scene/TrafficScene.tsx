@@ -48,6 +48,12 @@ interface Prediction {
   label?: string;
 }
 
+interface RoadSegment {
+  points: { x: number; z: number }[];
+  width: number;
+  type: "primary" | "secondary" | "residential";
+}
+
 interface TrafficSceneProps {
   tiles: Tile[];
   gridSize: number;
@@ -58,6 +64,7 @@ interface TrafficSceneProps {
   accidentPoint?: { x: number; z: number } | null;
   onGroundClick?: (point: { x: number; z: number }) => void;
   interactive?: boolean;
+  roads?: RoadSegment[];
 }
 
 // Gradient sky dome — soft urban sky
@@ -107,6 +114,7 @@ export function TrafficScene({
   accidentPoint,
   onGroundClick,
   interactive = true,
+  roads,
 }: TrafficSceneProps) {
   const mapSize = (gridSize * tileSize) / 2;
 
@@ -148,9 +156,9 @@ export function TrafficScene({
 
           {/* Scene */}
           <Ground size={mapSize} onGroundClick={interactive ? onGroundClick : undefined} />
-          <Roads tiles={tiles} gridSize={gridSize} tileSize={tileSize} />
+          <Roads tiles={tiles} gridSize={gridSize} tileSize={tileSize} roads={roads} />
           <Buildings tiles={tiles} gridSize={gridSize} tileSize={tileSize} />
-          <Vehicles initialVehicles={vehicles} currentFrame={currentFrame} />
+          <Vehicles initialVehicles={vehicles} currentFrame={currentFrame} roads={roads} />
 
           {/* Prediction markers */}
           {predictions.map((p, i) => (

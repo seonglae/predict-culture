@@ -121,6 +121,13 @@ export function WaveField() {
     let mouseX = width / 2;
     let mouseY = height / 2;
     let mouseActive = false;
+    // Smoothed mouse position for fluid interaction
+    let smoothMouseX = width / 2;
+    let smoothMouseY = height / 2;
+    let mouseVelX = 0;
+    let mouseVelY = 0;
+    let prevMouseX = width / 2;
+    let prevMouseY = height / 2;
 
     const resize = () => {
       width = window.innerWidth;
@@ -134,15 +141,19 @@ export function WaveField() {
     resize();
 
     const onMove = (e: MouseEvent) => {
+      prevMouseX = mouseX;
+      prevMouseY = mouseY;
       mouseX = e.clientX;
       mouseY = e.clientY;
+      mouseVelX = mouseX - prevMouseX;
+      mouseVelY = mouseY - prevMouseY;
       mouseActive = true;
     };
     const onLeave = () => { mouseActive = false; };
 
     window.addEventListener("resize", resize);
-    canvas.addEventListener("mousemove", onMove);
-    canvas.addEventListener("mouseleave", onLeave);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseleave", onLeave);
 
     // Palette — teal, violet, rose, cyan
     const huePool = [168, 172, 176, 255, 262, 270, 320, 328, 190, 195];
@@ -221,23 +232,63 @@ export function WaveField() {
         p.vx += Math.cos(angle) * mag * 0.12;
         p.vy += Math.sin(angle) * mag * 0.12;
 
-        // Mouse repulsion
+        // Mouse interaction — multi-zone: repel close, vortex mid, attract far
         if (mouseActive) {
-          const dx = p.x - mouseX;
-          const dy = p.y - mouseY;
+          // Smooth mouse tracking
+          smoothMouseX += (mouseX - smoothMouseX) * 0.12;
+          smoothMouseY += (mouseY - smoothMouseY) * 0.12;
+
+          const dx = p.x - smoothMouseX;
+          const dy = p.y - smoothMouseY;
           const distSq = dx * dx + dy * dy;
-          const radius = 180;
-          if (distSq < radius * radius && distSq > 1) {
+          const outerRadius = 300;
+          const midRadius = 160;
+          const innerRadius = 60;
+
+          if (distSq < outerRadius * outerRadius && distSq > 1) {
             const dist = Math.sqrt(distSq);
-            const force = ((radius - dist) / radius) * 0.6;
-            p.vx += (dx / dist) * force;
-            p.vy += (dy / dist) * force;
+            const nx = dx / dist;
+            const ny = dy / dist;
+            // Perpendicular for swirl (clockwise)
+            const perpX = -ny;
+            const perpY = nx;
+
+            if (dist < innerRadius) {
+              // Zone 1: gentle repulsion
+              const force = ((innerRadius - dist) / innerRadius) * 0.18;
+              p.vx += nx * force;
+              p.vy += ny * force;
+              p.vx += perpX * force * 0.3;
+              p.vy += perpY * force * 0.3;
+            } else if (dist < midRadius) {
+              // Zone 2: subtle swirl
+              const t2 = (dist - innerRadius) / (midRadius - innerRadius);
+              const swirlForce = (1 - Math.abs(t2 - 0.5) * 2) * 0.12;
+              p.vx += perpX * swirlForce;
+              p.vy += perpY * swirlForce;
+              const pullForce = 0.015;
+              p.vx -= nx * pullForce;
+              p.vy -= ny * pullForce;
+            } else {
+              // Zone 3: very soft attraction
+              const falloff = 1 - (dist - midRadius) / (outerRadius - midRadius);
+              const attractForce = falloff * falloff * 0.025;
+              p.vx -= nx * attractForce;
+              p.vy -= ny * attractForce;
+              p.vx += perpX * attractForce * 0.4;
+              p.vy += perpY * attractForce * 0.4;
+            }
+
+            // Mouse velocity influence
+            const velInfluence = Math.max(0, 1 - dist / outerRadius) * 0.008;
+            p.vx += mouseVelX * velInfluence;
+            p.vy += mouseVelY * velInfluence;
           }
         }
 
         // Damping
-        p.vx *= 0.94;
-        p.vy *= 0.94;
+        p.vx *= 0.93;
+        p.vy *= 0.93;
 
         p.x += p.vx;
         p.y += p.vy;
@@ -275,6 +326,22 @@ export function WaveField() {
         ctx.arc(p.x, p.y, p.size * (0.5 + speed * 0.15), 0, Math.PI * 2);
         ctx.fillStyle = `hsla(${p.hue}, ${p.sat}%, ${dark ? brightness : Math.max(10, brightness - 30)}%, ${alpha * (dark ? 0.65 : 0.45)})`;
         ctx.fill();
+      }
+
+      // Subtle cursor glow — shows interaction zone
+      if (mouseActive) {
+        const gradient = ctx.createRadialGradient(
+          smoothMouseX, smoothMouseY, 0,
+          smoothMouseX, smoothMouseY, 180
+        );
+        const hue = huePool[Math.floor((time * 0.01) % huePool.length)];
+        gradient.addColorStop(0, `hsla(${hue}, 60%, 50%, ${dark ? 0.008 : 0.005})`);
+        gradient.addColorStop(0.4, `hsla(${hue}, 50%, 40%, ${dark ? 0.004 : 0.003})`);
+        gradient.addColorStop(1, "transparent");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(
+          smoothMouseX - 200, smoothMouseY - 200, 400, 400
+        );
       }
 
       // Crackling static — jagged discharge lines
@@ -327,8 +394,8 @@ export function WaveField() {
     return () => {
       cancelAnimationFrame(animRef.current);
       window.removeEventListener("resize", resize);
-      canvas.removeEventListener("mousemove", onMove);
-      canvas.removeEventListener("mouseleave", onLeave);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseleave", onLeave);
     };
   }, []);
 

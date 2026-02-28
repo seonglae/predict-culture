@@ -27,9 +27,16 @@ interface VehicleSpawn {
   altitude?: number;
 }
 
+interface RoadSegment {
+  points: { x: number; z: number }[];
+  width: number;
+  type: "primary" | "secondary" | "residential";
+}
+
 interface VehiclesProps {
   initialVehicles: VehicleSpawn[];
   currentFrame?: VehicleFrame[];
+  roads?: RoadSegment[];
 }
 
 const VEHICLE_DIMS: Record<string, { w: number; h: number; l: number }> = {
@@ -41,17 +48,83 @@ const VEHICLE_DIMS: Record<string, { w: number; h: number; l: number }> = {
   helicopter: { w: 0.9, h: 0.5, l: 1.8 },
 };
 
-export function Vehicles({ initialVehicles, currentFrame }: VehiclesProps) {
+/**
+ * Project point onto nearest road polyline segment.
+ * Returns snapped position and road tangent heading, or null if too far.
+ */
+function snapToRoad(
+  px: number,
+  pz: number,
+  roads: RoadSegment[],
+  maxDist: number = 3.0
+): { x: number; z: number; heading: number } | null {
+  let bestDist = maxDist * maxDist;
+  let bestX = px;
+  let bestZ = pz;
+  let bestHeading = 0;
+
+  for (const road of roads) {
+    const pts = road.points;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const ax = pts[i].x;
+      const az = pts[i].z;
+      const bx = pts[i + 1].x;
+      const bz = pts[i + 1].z;
+
+      // Project point onto line segment
+      const dx = bx - ax;
+      const dz = bz - az;
+      const lenSq = dx * dx + dz * dz;
+      if (lenSq < 0.0001) continue;
+
+      let t = ((px - ax) * dx + (pz - az) * dz) / lenSq;
+      t = Math.max(0, Math.min(1, t));
+
+      const cx = ax + t * dx;
+      const cz = az + t * dz;
+      const distSq = (px - cx) * (px - cx) + (pz - cz) * (pz - cz);
+
+      if (distSq < bestDist) {
+        bestDist = distSq;
+        bestX = cx;
+        bestZ = cz;
+        // Heading from road tangent direction
+        bestHeading = Math.atan2(dx, -dz);
+      }
+    }
+  }
+
+  if (bestDist >= maxDist * maxDist) return null;
+  return { x: bestX, z: bestZ, heading: bestHeading };
+}
+
+export function Vehicles({ initialVehicles, currentFrame, roads }: VehiclesProps) {
   return (
     <group>
       {initialVehicles.map((v) => {
         const frame = currentFrame?.find((f) => f.id === v.id);
-        const x = frame?.x ?? v.x;
-        const z = frame?.z ?? v.z;
-        const heading = frame?.heading ?? v.heading;
+        let x = frame?.x ?? v.x;
+        let z = frame?.z ?? v.z;
+        let heading = frame?.heading ?? v.heading;
         const isCrashed = frame?.state === "crashed";
         const dims = VEHICLE_DIMS[v.type] ?? VEHICLE_DIMS.car;
         const altitude = frame?.altitude ?? v.altitude ?? 0;
+
+        // Snap ground vehicles to nearest road polyline
+        if (roads && roads.length > 0 && !v.flying && !isCrashed) {
+          const snapped = snapToRoad(x, z, roads);
+          if (snapped) {
+            x = snapped.x;
+            z = snapped.z;
+            // Pick road tangent direction (forward or reverse) closest to simulation heading
+            const simDx = Math.sin(heading);
+            const simDz = -Math.cos(heading);
+            const roadDx = Math.sin(snapped.heading);
+            const roadDz = -Math.cos(snapped.heading);
+            const dot = simDx * roadDx + simDz * roadDz;
+            heading = dot >= 0 ? snapped.heading : snapped.heading + Math.PI;
+          }
+        }
 
         if (v.type === "motorcycle") {
           return <Motorcycle key={v.id} x={x} z={z} heading={heading} color={v.color} isCrashed={isCrashed} />;

@@ -62,6 +62,12 @@ export interface SimulationFrame {
   vehicles: VehicleFrame[];
 }
 
+export interface RoadSegment {
+  points: { x: number; z: number }[];
+  width: number;
+  type: "primary" | "secondary" | "residential";
+}
+
 export interface SceneConfig {
   gridSize: number;
   tileSize: number;
@@ -70,6 +76,9 @@ export interface SceneConfig {
   mapRadius: number;
   cityName?: string;
   cityLabel?: string;
+  roads?: RoadSegment[];
+  lat?: number;
+  lon?: number;
 }
 
 export interface SimulationResult {

@@ -1,79 +1,177 @@
 "use client";
 
+import { useMemo } from "react";
 import { motion } from "framer-motion";
+
+interface RoadSegment {
+  points: { x: number; z: number }[];
+  width: number;
+  type: "primary" | "secondary" | "residential";
+}
 
 interface GlobeMiniProps {
   cityName?: string;
   cityLabel?: string;
+  lat?: number;
+  lon?: number;
+  roads?: RoadSegment[];
 }
 
-export function GlobeMini({ cityName, cityLabel }: GlobeMiniProps) {
+export function GlobeMini({ cityName, cityLabel, lat, lon, roads }: GlobeMiniProps) {
   if (!cityName) return null;
+
+  // Format coordinates for display
+  const coordStr =
+    lat !== undefined && lon !== undefined
+      ? `${Math.abs(lat).toFixed(3)}°${lat >= 0 ? "N" : "S"} ${Math.abs(lon).toFixed(3)}°${lon >= 0 ? "E" : "W"}`
+      : undefined;
 
   return (
     <motion.div
       initial={{ opacity: 0, x: -20, scale: 0.8 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
       transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-      className="absolute top-4 left-4 z-30 flex items-center gap-3"
+      className="absolute top-4 left-4 z-30"
     >
-      {/* Mini globe */}
-      <div className="relative w-10 h-10 flex-shrink-0">
-        <div
-          className="absolute inset-0 rounded-full border border-white/10"
-          style={{
-            background: "radial-gradient(circle at 35% 35%, #1a2a3a, #0a0a1a)",
-          }}
-        />
-        {/* Rotating grid overlay */}
-        <div
-          className="absolute inset-0 rounded-full overflow-hidden"
-          style={{
-            animation: "globe-spin 8s linear infinite",
-          }}
-        >
-          {/* Horizontal lines */}
-          {[25, 50, 75].map((top) => (
-            <div
-              key={top}
-              className="absolute left-0 right-0 h-px bg-white/10"
-              style={{ top: `${top}%` }}
-            />
-          ))}
-          {/* Vertical lines */}
-          {[25, 50, 75].map((left) => (
-            <div
-              key={left}
-              className="absolute top-0 bottom-0 w-px bg-white/10"
-              style={{ left: `${left}%` }}
-            />
-          ))}
+      {/* GTA-style minimap container */}
+      <div
+        className="relative overflow-hidden border border-white/15 shadow-lg shadow-black/40"
+        style={{
+          width: 140,
+          height: 140,
+          borderRadius: 4,
+          background: "#1a1f2a",
+        }}
+      >
+        {/* Road map SVG */}
+        <MiniMapRoads roads={roads} />
+
+        {/* Compass indicator */}
+        <div className="absolute top-1.5 right-1.5 text-[8px] text-white/40 font-mono font-bold">
+          N
         </div>
-        {/* City dot */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-[#00e5c7] shadow-[0_0_6px_rgba(0,229,199,0.6)]" />
+
+        {/* City label overlay */}
+        <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5 bg-gradient-to-t from-black/80 to-transparent">
+          <div
+            className="text-[10px] text-white/90 tracking-wide leading-tight truncate"
+            style={{ fontFamily: "var(--font-display), sans-serif" }}
+          >
+            {cityName}
+          </div>
+          {cityLabel && (
+            <div className="text-[8px] text-white/40 font-mono tracking-wider truncate">
+              {cityLabel}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* City text */}
-      <div className="flex flex-col">
-        <span
-          className="text-xs text-white/80 tracking-wide leading-tight"
-          style={{ fontFamily: "var(--font-display), sans-serif" }}
-        >
-          {cityName}
-        </span>
-        {cityLabel && (
-          <span className="text-[9px] text-white/30 font-mono tracking-wider">
-            {cityLabel}
-          </span>
-        )}
-      </div>
-
-      <style jsx>{`
-        @keyframes globe-spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
+      {/* Coordinates below minimap */}
+      {coordStr && (
+        <div className="text-[8px] text-white/25 font-mono tracking-wider mt-1 text-center">
+          {coordStr}
+        </div>
+      )}
     </motion.div>
+  );
+}
+
+function MiniMapRoads({ roads }: { roads?: RoadSegment[] }) {
+  const svgPaths = useMemo(() => {
+    if (!roads || roads.length === 0) return null;
+
+    // Find bounds of all roads
+    let minX = Infinity, maxX = -Infinity;
+    let minZ = Infinity, maxZ = -Infinity;
+    for (const road of roads) {
+      for (const p of road.points) {
+        minX = Math.min(minX, p.x);
+        maxX = Math.max(maxX, p.x);
+        minZ = Math.min(minZ, p.z);
+        maxZ = Math.max(maxZ, p.z);
+      }
+    }
+
+    const rangeX = maxX - minX || 1;
+    const rangeZ = maxZ - minZ || 1;
+    const range = Math.max(rangeX, rangeZ);
+    const pad = 8; // px padding
+    const size = 140;
+    const drawSize = size - pad * 2;
+    const centerX = (minX + maxX) / 2;
+    const centerZ = (minZ + maxZ) / 2;
+
+    const toSvg = (x: number, z: number): [number, number] => {
+      const sx = pad + ((x - centerX) / range + 0.5) * drawSize;
+      const sz = pad + ((z - centerZ) / range + 0.5) * drawSize;
+      return [sx, sz];
+    };
+
+    const paths: { d: string; width: number; type: RoadSegment["type"] }[] = [];
+
+    for (const road of roads) {
+      if (road.points.length < 2) continue;
+      const pts = road.points.map((p) => toSvg(p.x, p.z));
+      const d = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+
+      let strokeWidth = 1;
+      if (road.type === "primary") strokeWidth = 2;
+      else if (road.type === "secondary") strokeWidth = 1.5;
+
+      paths.push({ d, width: strokeWidth, type: road.type });
+    }
+
+    return paths;
+  }, [roads]);
+
+  if (!svgPaths) {
+    // No road data — show placeholder grid pattern
+    return (
+      <svg width={140} height={140} className="absolute inset-0">
+        {/* Simple grid pattern as placeholder */}
+        {[28, 56, 84, 112].map((v) => (
+          <line key={`h${v}`} x1={0} y1={v} x2={140} y2={v} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
+        ))}
+        {[28, 56, 84, 112].map((v) => (
+          <line key={`v${v}`} x1={v} y1={0} x2={v} y2={140} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
+        ))}
+      </svg>
+    );
+  }
+
+  return (
+    <svg width={140} height={140} className="absolute inset-0">
+      {/* Road outlines (darker, slightly wider) */}
+      {svgPaths.map((p, i) => (
+        <path
+          key={`outline-${i}`}
+          d={p.d}
+          fill="none"
+          stroke="rgba(80,80,100,0.5)"
+          strokeWidth={p.width + 1.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ))}
+      {/* Road lines */}
+      {svgPaths.map((p, i) => (
+        <path
+          key={`road-${i}`}
+          d={p.d}
+          fill="none"
+          stroke={
+            p.type === "primary"
+              ? "rgba(255,255,255,0.45)"
+              : p.type === "secondary"
+                ? "rgba(255,255,255,0.3)"
+                : "rgba(255,255,255,0.18)"
+          }
+          strokeWidth={p.width}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ))}
+    </svg>
   );
 }

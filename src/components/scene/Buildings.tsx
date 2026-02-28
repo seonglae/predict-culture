@@ -100,18 +100,18 @@ function BuildingBlock({
   buildingType: string;
 }) {
   const groupRef = useRef<THREE.Group>(null);
-  const dropHeight = 25 + height;
-  const dropDuration = 0.6;
+  const riseDepth = -(height + 2);
+  const riseDuration = 0.6;
   const padding = 0.4;
   const buildingSize = tileSize - padding * 2;
 
   useFrame(() => {
     if (!groupRef.current || !timeRef.current) return;
     const elapsed = timeRef.current;
-    const progress = Math.max(0, Math.min(1, (elapsed - delay) / dropDuration));
-    const easedY = progress >= 1 ? 0 : dropHeight * (1 - easeOutBack(progress));
+    const progress = Math.max(0, Math.min(1, (elapsed - delay) / riseDuration));
+    const easedY = progress >= 1 ? 0 : riseDepth * (1 - easeOutBack(progress));
     groupRef.current.position.y = easedY;
-    const scaleProgress = Math.max(0, Math.min(1, (elapsed - delay - dropDuration * 0.8) / 0.15));
+    const scaleProgress = Math.max(0, Math.min(1, (elapsed - delay - riseDuration * 0.8) / 0.15));
     const s = scaleProgress < 1 ? 0.95 + scaleProgress * 0.05 : 1;
     groupRef.current.scale.setScalar(s);
   });
@@ -120,7 +120,7 @@ function BuildingBlock({
   const isMedium = buildingType === "building_medium";
 
   return (
-    <group ref={groupRef} position={[x, dropHeight, z]}>
+    <group ref={groupRef} position={[x, riseDepth, z]}>
       {/* Main body — concrete */}
       <RoundedBox
         args={[buildingSize, height, buildingSize]}
@@ -178,18 +178,18 @@ function ParkTile({
   timeRef: React.RefObject<number>;
 }) {
   const groupRef = useRef<THREE.Group>(null);
-  const dropHeight = 18;
-  const dropDuration = 0.5;
+  const riseDepth = -4;
+  const riseDuration = 0.5;
 
   useFrame(() => {
     if (!groupRef.current || !timeRef.current) return;
     const elapsed = timeRef.current;
-    const progress = Math.max(0, Math.min(1, (elapsed - delay) / dropDuration));
-    groupRef.current.position.y = progress >= 1 ? 0 : dropHeight * (1 - easeOutBack(progress));
+    const progress = Math.max(0, Math.min(1, (elapsed - delay) / riseDuration));
+    groupRef.current.position.y = progress >= 1 ? 0 : riseDepth * (1 - easeOutBack(progress));
   });
 
   return (
-    <group ref={groupRef} position={[x, dropHeight, z]}>
+    <group ref={groupRef} position={[x, riseDepth, z]}>
       {/* Ground — muted green */}
       <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[tileSize - 0.3, tileSize - 0.3]} />
