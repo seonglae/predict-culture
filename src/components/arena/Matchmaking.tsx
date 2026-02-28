@@ -50,10 +50,10 @@ export function Matchmaking({ onTimeout, opponentFound, opponentName, showGlobe 
       {/* Globe — full screen canvas, globe centered */}
       {showGlobe && (
         <Canvas
-          camera={{ position: [0, 0, 3.2], fov: 45 }}
+          camera={{ position: [0, 0, 5], fov: 45 }}
           style={{ position: "absolute", inset: 0 }}
         >
-          <GeoGlobe radius={1.4} spinSpeed={0.3} cities={CITY_COORDS} />
+          <GeoGlobe radius={1.2} spinSpeed={0.3} cities={CITY_COORDS} />
         </Canvas>
       )}
 
