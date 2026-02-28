@@ -32,10 +32,10 @@ function ZoomGlobeScene({ selectedCity, onComplete }: GlobeTransitionProps) {
     [selectedCity]
   );
 
-  // Target rotation so selected city faces camera
+  // Target rotation so selected city faces camera (+z axis)
+  // With new coords: lon=0 faces +z, so rotate by -lon to bring city to front
   const targetRotationY = useMemo(() => {
-    const theta = (targetCity.lon + 180) * (Math.PI / 180);
-    return -theta + Math.PI;
+    return -targetCity.lon * (Math.PI / 180);
   }, [targetCity]);
 
   const cityMarkers = useMemo(
