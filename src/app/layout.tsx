@@ -18,12 +18,12 @@ const nasalization = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "PredictDrive",
+  title: "Predict Chaos",
   description:
-    "Observe traffic. Predict collisions. Beat the AI. A competitive 3D prediction arena.",
+    "Watch AI cultures clash. Predict which belief dominates. A culture propagation simulation powered by Mistral AI.",
   openGraph: {
-    title: "PredictDrive",
-    description: "Observe. Predict. Collapse.",
+    title: "Predict Chaos",
+    description: "Watch. Predict. Propagate.",
   },
 };
 

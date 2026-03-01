@@ -39,3 +39,6 @@ next-env.d.ts
 # claude
 .claude/
 public/fonts/.next/
+
+# slides
+slides/
