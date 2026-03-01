@@ -61,8 +61,8 @@ function ArenaContent() {
     }
     if (phase === "running") {
       bgmRef.current = playBattleBGM();
-    } else if (phase !== "running" && bgmRef.current) {
-      bgmRef.current.stop();
+    } else {
+      bgmRef.current?.stop();
       bgmRef.current = null;
     }
     return () => {
@@ -336,14 +336,6 @@ function ArenaContent() {
                   ))}
                 </div>
 
-                {/* Bot overview */}
-                <div className="flex flex-wrap gap-2 justify-center max-w-lg">
-                  {bots.map((bot) => (
-                    <span key={bot._id} className="px-2 py-1 rounded-full border border-white/10 text-[10px] font-mono" style={{ borderColor: bot.color + "30", color: bot.color + "99" }}>
-                      {bot.name}: &quot;{bot.belief}&quot;
-                    </span>
-                  ))}
-                </div>
               </div>
             </motion.div>
           )}

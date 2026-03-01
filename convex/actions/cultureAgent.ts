@@ -267,21 +267,30 @@ Rules:
         ];
 
         try {
-          const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-            body: JSON.stringify({
-              model: "mistral-small-latest",
-              messages,
-              tools: TOOLS,
-              tool_choice: "any",
-              temperature: 1.2,
-              max_tokens: 500,
-            }),
-          });
+          // Retry with backoff for rate limits
+          let response: Response | null = null;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            response = await fetch("https://api.mistral.ai/v1/chat/completions", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+              body: JSON.stringify({
+                model: "mistral-small-latest",
+                messages,
+                tools: TOOLS,
+                tool_choice: "any",
+                temperature: 1.2,
+                max_tokens: 500,
+              }),
+            });
+            if (response.status === 429) {
+              await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+              continue;
+            }
+            break;
+          }
 
-          if (!response.ok) {
-            console.error(`Mistral API error: ${response.status}`);
+          if (!response || !response.ok) {
+            console.error(`Mistral API error: ${response?.status}`);
             continue;
           }
 
