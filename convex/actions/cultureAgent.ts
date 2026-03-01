@@ -211,15 +211,32 @@ export const runAgentLoop = internalAction({
 
         const nearbyDiff = nearbyBots.filter((b) => b.belief !== thisBot.belief);
 
+        // Find the farthest bot with a different belief to walk toward
+        const diffBots = freshBots.filter((b) => b._id !== thisBot._id && b.belief !== thisBot.belief);
+        const closestDiff = diffBots.length > 0
+          ? diffBots.sort((a, b) => dist(thisBot.posX, thisBot.posZ, a.posX, a.posZ) - dist(thisBot.posX, thisBot.posZ, b.posX, b.posZ))[0]
+          : null;
+        const walkTarget = closestDiff
+          ? `WALK TARGET: ${closestDiff.name} at (${closestDiff.posX.toFixed(0)},${closestDiff.posZ.toFixed(0)}). You MUST call move_to with x=${closestDiff.posX.toFixed(0)} z=${closestDiff.posZ.toFixed(0)} to walk there. You cannot persuade from far away — you MUST physically walk to them first!`
+          : "All bots share your belief. Wander randomly — call move_to with a random position.";
+
         const systemPrompt = `You are ${thisBot.name}. Belief: "${thisBot.belief}". Pos: (${thisBot.posX.toFixed(0)},${thisBot.posZ.toFixed(0)}). Map: -${mapRadius} to ${mapRadius}.
 Bots: ${botsCompact}
 Chat: ${chat}
-${nearbyDiff.length > 0 ? `NEARBY different belief: ${nearbyDiff.map((b) => `${b.name}="${b.belief}"`).join(", ")}. MUST call change_belief to adopt one.` : "No different beliefs nearby. Walk toward one."}
-ALWAYS: 1) change_belief if nearby differs 2) move_to a bot 3) speech 1 sentence`;
+
+${walkTarget}
+
+${nearbyDiff.length > 0 ? `NEARBY different belief: ${nearbyDiff.map((b) => `${b.name}="${b.belief}"`).join(", ")}. MUST call change_belief to adopt one.` : ""}
+
+CRITICAL RULES:
+- You MUST call move_to EVERY turn. Walking is mandatory. You need to physically go to other bots to persuade them.
+- If a nearby bot has a different belief, call change_belief first.
+- After moving, call speech with 1 short sentence.
+- move_to is the MOST IMPORTANT action. Always walk.`;
 
         const messages: any[] = [
           { role: "system", content: systemPrompt },
-          { role: "user", content: "Go!" },
+          { role: "user", content: `${thisBot.name}, call move_to NOW to walk toward ${closestDiff?.name ?? "a random spot"}. Then speech.` },
         ];
 
         try {
