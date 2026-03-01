@@ -87,13 +87,12 @@ export function Header() {
                   })
                 )}
               </div>
-              <Link
+              <a
                 href="/leaderboard"
-                className="block px-4 py-2.5 text-center text-[11px] font-mono text-white/40 hover:text-white/60 border-t border-white/10 transition-colors"
-                onClick={() => setShowRanking(false)}
+                className="block px-4 py-2.5 text-center text-[11px] font-mono text-white/40 hover:text-white/60 border-t border-white/10 transition-colors !border-b-0"
               >
                 View Full Leaderboard →
-              </Link>
+              </a>
             </div>
           )}
         </div>
