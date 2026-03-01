@@ -9,15 +9,24 @@ interface RoadSegment {
   type: "primary" | "secondary" | "residential";
 }
 
+interface Tile {
+  row: number;
+  col: number;
+  type: string;
+}
+
 interface GlobeMiniProps {
   cityName?: string;
   cityLabel?: string;
   lat?: number;
   lon?: number;
   roads?: RoadSegment[];
+  tiles?: Tile[];
+  gridSize?: number;
+  tileSize?: number;
 }
 
-export function GlobeMini({ cityName, cityLabel, lat, lon, roads }: GlobeMiniProps) {
+export function GlobeMini({ cityName, cityLabel, lat, lon, roads, tiles, gridSize, tileSize }: GlobeMiniProps) {
   if (!cityName) return null;
 
   // Format coordinates for display
@@ -31,7 +40,7 @@ export function GlobeMini({ cityName, cityLabel, lat, lon, roads }: GlobeMiniPro
       initial={{ opacity: 0, x: -20, scale: 0.8 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
       transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-      className="absolute top-4 left-4 z-30"
+      className="absolute top-4 left-4 z-[100] pointer-events-none"
     >
       {/* GTA-style minimap container */}
       <div
@@ -44,7 +53,7 @@ export function GlobeMini({ cityName, cityLabel, lat, lon, roads }: GlobeMiniPro
         }}
       >
         {/* Road map SVG */}
-        <MiniMapRoads roads={roads} />
+        <MiniMapRoads roads={roads} tiles={tiles} gridSize={gridSize} tileSize={tileSize} />
 
         {/* Compass indicator */}
         <div className="absolute top-1.5 right-1.5 text-[8px] text-white/40 font-mono font-bold">
@@ -77,8 +86,28 @@ export function GlobeMini({ cityName, cityLabel, lat, lon, roads }: GlobeMiniPro
   );
 }
 
-function MiniMapRoads({ roads }: { roads?: RoadSegment[] }) {
+function MiniMapRoads({ roads, tiles, gridSize, tileSize }: { roads?: RoadSegment[]; tiles?: Tile[]; gridSize?: number; tileSize?: number }) {
   const svgPaths = useMemo(() => {
+    // If no polyline roads, generate paths from tile grid
+    if ((!roads || roads.length === 0) && tiles && gridSize && tileSize) {
+      const roadTiles = tiles.filter((t) => t.type.startsWith("road_"));
+      if (roadTiles.length === 0) return null;
+      const pad = 8;
+      const size = 140;
+      const drawSize = size - pad * 2;
+      const half = gridSize / 2;
+      const paths: { d: string; width: number; type: RoadSegment["type"] }[] = [];
+      for (const t of roadTiles) {
+        const sx = pad + ((t.col + 0.5) / gridSize) * drawSize;
+        const sz = pad + ((t.row + 0.5) / gridSize) * drawSize;
+        paths.push({
+          d: `M${sx.toFixed(1)},${sz.toFixed(1)} L${(sx + 0.1).toFixed(1)},${(sz + 0.1).toFixed(1)}`,
+          width: 2,
+          type: "residential",
+        });
+      }
+      return paths;
+    }
     if (!roads || roads.length === 0) return null;
 
     // Find bounds of all roads

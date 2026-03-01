@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import localFont from "next/font/local";
 import { ConvexClientProvider } from "./ConvexClientProvider";
 import ThemeProvider from "@/components/ThemeProvider";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const inter = Inter({
@@ -44,6 +45,7 @@ export default function RootLayout({
       <body className={`${inter.variable} ${nasalization.variable} font-sans antialiased bg-background text-foreground`}>
         <ThemeProvider>
           <ConvexClientProvider>{children}</ConvexClientProvider>
+          <Toaster theme="dark" position="top-center" richColors />
         </ThemeProvider>
       </body>
     </html>

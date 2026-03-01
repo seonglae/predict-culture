@@ -1,7 +1,6 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { GlowButton } from "@/components/ui/GlowButton";
 
 interface PlayerResult {
   name: string;
@@ -20,9 +19,6 @@ interface BattleResultProps {
   onPlayAgain: () => void;
 }
 
-const PLACEMENT_COLORS = ["#ffd700", "#c0c0c0", "#cd7f32"];
-const PLACEMENT_LABELS = ["1st", "2nd", "3rd"];
-
 export function BattleResult({ results, onPlayAgain }: BattleResultProps) {
   const sorted = [...results].sort((a, b) => a.placement - b.placement);
 
@@ -30,95 +26,100 @@ export function BattleResult({ results, onPlayAgain }: BattleResultProps) {
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center"
     >
-      <motion.div
-        initial={{ scale: 0.9, y: 20 }}
-        animate={{ scale: 1, y: 0 }}
-        transition={{ type: "spring", damping: 25 }}
-        className="w-full max-w-lg mx-4 p-8 rounded-2xl bg-card border border-border"
-      >
-        <h2 className="text-2xl font-bold text-center mb-6 bg-gradient-to-r from-accent-teal to-accent-orange bg-clip-text text-transparent">
-          Battle Results
-        </h2>
-
-        <div className="space-y-3 mb-8">
-          {sorted.map((player, i) => (
-            <motion.div
-              key={i}
-              initial={{ x: -20, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ delay: i * 0.15 }}
-              className={`flex items-center gap-4 p-4 rounded-xl border ${
-                player.isYou
-                  ? "border-accent-teal bg-accent-teal/5"
-                  : "border-border bg-background"
-              }`}
+      <div className="w-full max-w-sm mx-4">
+        <div className="entry-card relative rounded-3xl">
+          <div className="relative z-10 p-7">
+            <h2
+              className="text-[10px] font-mono mb-5 text-foreground/30 uppercase tracking-[0.2em]"
             >
-              {/* Placement */}
-              <div
-                className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm"
-                style={{
-                  backgroundColor: PLACEMENT_COLORS[player.placement] ?? "#6b6b80",
-                  color: player.placement === 0 ? "#000" : "#fff",
-                }}
-              >
-                {PLACEMENT_LABELS[player.placement] ?? `${player.placement + 1}th`}
-              </div>
+              Results
+            </h2>
 
-              {/* Player info */}
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-foreground">
-                    {player.name}
-                  </span>
-                  {player.isAI && (
-                    <span className="px-2 py-0.5 rounded-full text-xs bg-accent-purple/20 text-accent-purple">
-                      AI
-                    </span>
-                  )}
-                  {player.isYou && (
-                    <span className="px-2 py-0.5 rounded-full text-xs bg-accent-teal/20 text-accent-teal">
-                      You
-                    </span>
-                  )}
-                </div>
-                <div className="flex gap-3 mt-1 text-xs text-muted">
-                  <span>Score: {player.score}</span>
-                  <span>Dist: {player.distanceScore}</span>
-                  <span>Time: {player.timingScore}</span>
-                </div>
-              </div>
-
-              {/* ELO change */}
-              <div className="text-right">
-                <div className="text-sm text-muted">ELO {player.elo}</div>
-                <div
-                  className={`text-sm font-bold ${
-                    player.eloChange > 0
-                      ? "text-success"
-                      : player.eloChange < 0
-                        ? "text-danger"
-                        : "text-muted"
-                  }`}
+            <div className="space-y-2 mb-6">
+              {sorted.map((player, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ x: -10, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: i * 0.1 }}
+                  className="flex items-center gap-3 py-3 px-3 rounded-xl"
+                  style={{
+                    background: player.isYou
+                      ? "rgba(0, 229, 199, 0.04)"
+                      : "transparent",
+                  }}
                 >
-                  {player.eloChange > 0 ? "+" : ""}
-                  {player.eloChange}
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
+                  {/* Placement */}
+                  <span
+                    className="text-sm font-mono font-bold w-6 text-center"
+                    style={{
+                      color: player.placement === 0
+                        ? "var(--accent-teal)"
+                        : "var(--muted)",
+                    }}
+                  >
+                    {player.placement + 1}
+                  </span>
 
-        <GlowButton
-          variant="teal"
-          size="lg"
-          className="w-full"
-          onClick={onPlayAgain}
-        >
-          Play Again
-        </GlowButton>
-      </motion.div>
+                  {/* Player info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-mono text-foreground/80 truncate">
+                        {player.name}
+                      </span>
+                      {player.isAI && (
+                        <span className="text-[9px] font-mono text-foreground/25 uppercase">
+                          ai
+                        </span>
+                      )}
+                      {player.isYou && (
+                        <span className="text-[9px] font-mono text-foreground/25 uppercase">
+                          you
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-3 mt-0.5 text-[10px] font-mono text-foreground/20">
+                      <span>{player.score} pts</span>
+                      <span>d:{player.distanceScore}</span>
+                      <span>t:{player.timingScore}</span>
+                    </div>
+                  </div>
+
+                  {/* ELO */}
+                  <div className="text-right">
+                    <div className="text-[10px] font-mono text-foreground/20">
+                      {player.elo}
+                    </div>
+                    <div
+                      className="text-xs font-mono font-bold"
+                      style={{
+                        color:
+                          player.eloChange > 0
+                            ? "var(--success)"
+                            : player.eloChange < 0
+                              ? "var(--danger)"
+                              : "var(--muted)",
+                      }}
+                    >
+                      {player.eloChange > 0 ? "+" : ""}
+                      {player.eloChange}
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+
+            <button
+              onClick={onPlayAgain}
+              className="entry-submit w-full py-3 rounded-xl text-sm font-mono font-bold tracking-wider uppercase transition-all cursor-pointer text-foreground/70 hover:text-foreground/90"
+            >
+              Again
+            </button>
+          </div>
+        </div>
+      </div>
     </motion.div>
   );
 }
