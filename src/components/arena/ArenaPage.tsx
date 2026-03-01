@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
@@ -14,6 +14,7 @@ import { CultureScene } from "@/components/scene/CultureScene";
 import { CultureSidebar } from "@/components/culture/CultureSidebar";
 import { GlobeMini } from "@/components/arena/GlobeMini";
 import { useSpatialAudio } from "@/hooks/useSpatialAudio";
+import { warmUpAudio, playCityVoice, playMatchmakingAmbient, playBattleBGM } from "@/lib/sfx";
 
 type Phase = "name_entry" | "matchmaking" | "pick_belief" | "running" | "ended";
 
@@ -42,12 +43,44 @@ function ArenaContent() {
     else if (s === "ended") setPhase("ended");
   }, [culture?.status]);
 
+  // Audio handles
+  const matchAudioRef = useRef<{ stop: () => void } | null>(null);
+  const bgmRef = useRef<{ stop: () => void } | null>(null);
+
   // Spatial audio
   useSpatialAudio(messages as any[], bots as any[], userPos, phase === "running");
+
+  // Phase-based audio
+  useEffect(() => {
+    if (phase === "matchmaking") {
+      matchAudioRef.current = playMatchmakingAmbient();
+    } else {
+      matchAudioRef.current?.stop();
+      matchAudioRef.current = null;
+    }
+    if (phase === "running") {
+      bgmRef.current = playBattleBGM();
+    } else if (phase !== "running" && bgmRef.current) {
+      bgmRef.current.stop();
+      bgmRef.current = null;
+    }
+    return () => {
+      matchAudioRef.current?.stop();
+      bgmRef.current?.stop();
+    };
+  }, [phase]);
+
+  // City voice when city is found
+  useEffect(() => {
+    if (cityName && phase === "matchmaking") {
+      playCityVoice(cityName);
+    }
+  }, [cityName, phase]);
 
   const handleNameSubmit = useCallback(
     async (name: string, topic: string) => {
       try {
+        warmUpAudio();
         const id = await createCulture({ topic });
         setCultureId(id);
         setPhase("matchmaking");
