@@ -64,7 +64,10 @@ export function useSpatialAudio(
   // Play spatial TTS for a message
   const playSpatialTTS = useCallback(async (msg: SpatialMessage) => {
     const apiKey = process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY;
-    if (!apiKey) return;
+    if (!apiKey) {
+      console.warn("ElevenLabs API key missing — NEXT_PUBLIC_ELEVENLABS_API_KEY not set");
+      return;
+    }
 
     const voiceId = botVoiceMap.current.get(msg.senderId) ?? VOICE_IDS[0];
     const ctx = ensureAudioCtx();
@@ -77,13 +80,16 @@ export function useSpatialAudio(
           "xi-api-key": apiKey,
         },
         body: JSON.stringify({
-          text: msg.content.slice(0, 200), // limit text length
-          model_id: "eleven_turbo_v2",
+          text: msg.content.slice(0, 200),
+          model_id: "eleven_turbo_v2_5",
           voice_settings: { stability: 0.5, similarity_boost: 0.75 },
         }),
       });
 
-      if (!response.ok) return;
+      if (!response.ok) {
+        console.error("ElevenLabs TTS error:", response.status, await response.text().catch(() => ""));
+        return;
+      }
 
       const arrayBuffer = await response.arrayBuffer();
       const audioBuffer = await ctx.decodeAudioData(arrayBuffer);

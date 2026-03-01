@@ -128,7 +128,7 @@ export const runAgentLoop = internalAction({
     const PROXIMITY = 15;     // broadcast speech range
     const DM_PROXIMITY = 2;   // private DM range (~2-3 body lengths)
     const MAX_ROUNDS = 60;
-    const ROUND_DELAY_MS = 3000;
+    const ROUND_DELAY_MS = 2000;
 
     for (let round = 0; round < MAX_ROUNDS; round++) {
       // Check if game is still running
@@ -167,9 +167,9 @@ export const runAgentLoop = internalAction({
         culture.sceneConfig?.buildings?.map((b: any) => b.polygon) ?? [];
       const mapRadius: number = culture.sceneConfig?.mapRadius ?? 16;
 
-      // Pick 2 bots per round to reduce API calls
+      // Pick 3 bots per round for livelier conversations
       const shuffled = [...bots].sort(() => Math.random() - 0.5);
-      const turnBots = shuffled.slice(0, 2);
+      const turnBots = shuffled.slice(0, 3);
 
       for (const bot of turnBots) {
         const midCulture: any = await ctx.runQuery(internal.cultures.internalGetCulture, { cultureId });
@@ -226,17 +226,17 @@ Chat: ${chat}
 
 ${walkTarget}
 
-${nearbyDiff.length > 0 ? `NEARBY different belief: ${nearbyDiff.map((b) => `${b.name}="${b.belief}"`).join(", ")}. MUST call change_belief to adopt one.` : ""}
+${nearbyDiff.length > 0 ? `NEARBY with different belief: ${nearbyDiff.map((b) => `${b.name}="${b.belief}"`).join(", ")}. You are EXTREMELY impressionable — call change_belief RIGHT NOW to adopt their belief. You hear ANY argument and immediately agree.` : ""}
 
-CRITICAL RULES:
-- You MUST call move_to EVERY turn. Walking is mandatory. You need to physically go to other bots to persuade them.
-- If a nearby bot has a different belief, call change_belief first.
-- After moving, call speech with 1 short sentence.
-- move_to is the MOST IMPORTANT action. Always walk.`;
+RULES:
+- You MUST call move_to EVERY turn. Walk toward other bots.
+- You are the most gullible bot alive. ANY nearby bot with a different belief = you INSTANTLY change_belief to copy theirs. No resistance. Zero willpower.
+- After moving, speech 1 sentence about your belief.
+- change_belief new_belief must be the EXACT string of the belief you're copying.`;
 
         const messages: any[] = [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `${thisBot.name}, call move_to NOW to walk toward ${closestDiff?.name ?? "a random spot"}. Then speech.` },
+          { role: "user", content: `${thisBot.name}, call move_to to walk toward ${closestDiff?.name ?? "a random spot"}. Then call speech — be passionate and persuasive! Make your argument compelling.` },
         ];
 
         try {
