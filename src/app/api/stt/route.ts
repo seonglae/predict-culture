@@ -33,9 +33,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ transcript: data.text ?? "" });
     }
 
-    // Fallback: use Web Speech API suggestion (client-side)
-    // Return empty transcript to not block the UI
-    return NextResponse.json({ transcript: "" });
+    const errText = await response.text().catch(() => "");
+    console.error("Voxtral STT error:", response.status, errText);
+    return NextResponse.json({ transcript: "", error: `STT ${response.status}` }, { status: 200 });
   } catch (err) {
     console.error("STT error:", err);
     return NextResponse.json({ transcript: "" });
