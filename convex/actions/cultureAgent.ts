@@ -128,7 +128,7 @@ export const runAgentLoop = internalAction({
     const PROXIMITY = 15;     // broadcast speech range
     const DM_PROXIMITY = 2;   // private DM range (~2-3 body lengths)
     const MAX_ROUNDS = 60;
-    const ROUND_DELAY_MS = 2000;
+    const ROUND_DELAY_MS = 3000;
 
     for (let round = 0; round < MAX_ROUNDS; round++) {
       // Check if game is still running
@@ -283,7 +283,7 @@ Rules:
               }),
             });
             if (response.status === 429) {
-              await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+              await new Promise((r) => setTimeout(r, 3000 * (attempt + 1)));
               continue;
             }
             break;

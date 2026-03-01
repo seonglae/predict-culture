@@ -196,8 +196,8 @@ function Bot({ bot, speechText }: { bot: BotData; speechText?: string }) {
       {/* Name label — fixed size regardless of zoom */}
       <Html position={[0, 1.7, 0]} center zIndexRange={[0, 0]} style={{ pointerEvents: "none" }}>
         <div
-          className="px-3 py-1 rounded-full text-[13px] font-mono font-bold whitespace-nowrap"
-          style={{ backgroundColor: bot.color, color: "#fff", textShadow: "0 1px 3px rgba(0,0,0,0.6)" }}
+          className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold whitespace-nowrap"
+          style={{ backgroundColor: bot.color, color: "#fff", textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}
         >
           {bot.name}
         </div>
@@ -205,9 +205,9 @@ function Bot({ bot, speechText }: { bot: BotData; speechText?: string }) {
 
       {/* Speech bubble — fixed size regardless of zoom */}
       {bubble && (
-        <Html position={[0, 2.2, 0]} center zIndexRange={[0, 0]} style={{ pointerEvents: "none" }}>
+        <Html position={[0, 2.1, 0]} center zIndexRange={[0, 0]} style={{ pointerEvents: "none" }}>
           <div
-            className="max-w-[360px] min-w-[180px] px-4 py-2.5 rounded-xl text-[12px] leading-relaxed font-mono text-white shadow-lg animate-fade-in"
+            className="max-w-[280px] min-w-[140px] px-3 py-2 rounded-xl text-[10px] leading-relaxed font-mono text-white shadow-lg animate-fade-in"
             style={{
               backgroundColor: `${bot.color}cc`,
               backdropFilter: "blur(4px)",

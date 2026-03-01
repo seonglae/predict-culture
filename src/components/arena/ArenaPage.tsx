@@ -399,15 +399,26 @@ function ArenaContent() {
             >
               <div className="relative flex-1 h-full">
                 {sceneConfig && (
-                  <CultureScene
-                    gridSize={sceneConfig.gridSize}
-                    tileSize={sceneConfig.tileSize}
-                    roads={sceneConfig.roads}
-                    buildings={sceneConfig.buildings}
-                    waterPolygons={sceneConfig.waterPolygons}
-                    bots={bots}
-                    latestMessages={latestMessages}
-                  />
+                  <>
+                    <CultureScene
+                      gridSize={sceneConfig.gridSize}
+                      tileSize={sceneConfig.tileSize}
+                      roads={sceneConfig.roads}
+                      buildings={sceneConfig.buildings}
+                      waterPolygons={sceneConfig.waterPolygons}
+                      bots={bots}
+                      latestMessages={latestMessages}
+                    />
+                    <GlobeMini
+                      cityName={sceneConfig.cityName ?? cityName}
+                      cityLabel={sceneConfig.cityLabel}
+                      lat={sceneConfig.lat}
+                      lon={sceneConfig.lon}
+                      roads={sceneConfig.roads}
+                      gridSize={sceneConfig.gridSize}
+                      tileSize={sceneConfig.tileSize}
+                    />
+                  </>
                 )}
 
                 <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-50">
