@@ -497,6 +497,25 @@ export const endGame = internalMutation({
   },
 });
 
+// Client submits semantic similarity score after game ends
+export const submitSimilarityScore = mutation({
+  args: {
+    cultureId: v.id("cultures"),
+    similarityScore: v.number(), // 0-1, from on-device embeddings
+    maxSimilarity: v.number(),
+  },
+  handler: async (ctx, { cultureId, similarityScore, maxSimilarity }) => {
+    const culture = await ctx.db.get(cultureId);
+    if (!culture || culture.status !== "ended") return;
+    if ((culture as any).similarityScore !== undefined) return; // already scored
+
+    await ctx.db.patch(cultureId, {
+      similarityScore,
+      maxSimilarity,
+    } as any);
+  },
+});
+
 export const setCultureStatus = internalMutation({
   args: {
     cultureId: v.id("cultures"),

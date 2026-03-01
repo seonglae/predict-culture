@@ -15,6 +15,7 @@ import { CultureSidebar } from "@/components/culture/CultureSidebar";
 import { GlobeMini } from "@/components/arena/GlobeMini";
 import { useSpatialAudio } from "@/hooks/useSpatialAudio";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
+import { scorePrediction } from "@/lib/embeddings";
 import { warmUpAudio, playCityVoice, playMatchmakingAmbient, playBattleBGM } from "@/lib/sfx";
 
 type Phase = "name_entry" | "matchmaking" | "pick_belief" | "running" | "ended";
@@ -40,12 +41,29 @@ function ArenaContent() {
 
   const sceneReady = !!(culture && (culture.status === "pick_belief" || culture.status === "running" || culture.status === "ended"));
 
+  const submitSimilarity = useMutation(api.cultures.submitSimilarityScore);
+  const [similarityResult, setSimilarityResult] = useState<{ avgSimilarity: number; maxSimilarity: number } | null>(null);
+
   useEffect(() => {
     if (!culture) return;
     const s = culture.status;
     if (s === "running") setPhase("running");
-    else if (s === "ended") setPhase("ended");
-  }, [culture?.status]);
+    else if (s === "ended") {
+      setPhase("ended");
+      // Compute semantic similarity on-device
+      if (cultureId && culture.userPrediction && bots.length > 0 && !similarityResult) {
+        const beliefs = bots.map((b) => b.belief);
+        scorePrediction(culture.userPrediction, beliefs).then((result) => {
+          setSimilarityResult(result);
+          submitSimilarity({
+            cultureId: cultureId!,
+            similarityScore: result.avgSimilarity,
+            maxSimilarity: result.maxSimilarity,
+          }).catch(() => {});
+        }).catch(console.error);
+      }
+    }
+  }, [culture?.status, cultureId, bots.length]);
 
   // Audio handles
   const matchAudioRef = useRef<{ stop: () => void } | null>(null);
@@ -429,25 +447,28 @@ function ArenaContent() {
               </div>
 
               {/* Recording button — center bottom, full-width overlay */}
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center pointer-events-none">
+              <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center pointer-events-none">
                 <button
                   onMouseDown={startRecording}
                   onMouseUp={stopRecording}
                   onMouseLeave={stopRecording}
                   onTouchStart={startRecording}
                   onTouchEnd={stopRecording}
-                  className={`pointer-events-auto w-16 h-16 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer ${
+                  className={`pointer-events-auto w-20 h-20 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer ${
                     isRecording
-                      ? "border-red-500 bg-red-500/30 scale-110 shadow-[0_0_30px_rgba(239,68,68,0.4)]"
-                      : "border-white/30 bg-black/60 backdrop-blur-md hover:border-white/50 hover:bg-black/70"
+                      ? "border-red-500 bg-red-500/20 scale-110 shadow-[0_0_40px_rgba(239,68,68,0.4)] animate-pulse"
+                      : "border-white/20 bg-black/70 backdrop-blur-lg hover:border-white/40 hover:bg-black/80 hover:scale-105"
                   }`}
                 >
-                  <span className={`text-2xl ${isRecording ? "text-red-400" : "text-white/60"}`}>
-                    {isRecording ? "●" : "🎤"}
-                  </span>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={isRecording ? "text-red-400" : "text-white/60"}>
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                    <line x1="12" y1="19" x2="12" y2="23" />
+                    <line x1="8" y1="23" x2="16" y2="23" />
+                  </svg>
                 </button>
-                <p className="text-[10px] font-mono text-white/30 mt-2">
-                  {isRecording ? "Recording..." : "Hold to speak"}
+                <p className="text-[12px] font-mono text-white/40 mt-3 tracking-wide">
+                  {isRecording ? "Recording..." : "Hold to talk"}
                 </p>
               </div>
             </motion.div>
@@ -539,6 +560,21 @@ function ArenaContent() {
                             </p>
                           )}
                         </motion.div>
+
+                        {/* Semantic similarity */}
+                        {similarityResult && (
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: 0.7 }}
+                            className="flex items-center justify-center gap-4 mb-3"
+                          >
+                            <div className="text-center">
+                              <p className="text-[9px] font-mono text-white/30 uppercase">Similarity</p>
+                              <p className="text-[16px] font-mono text-white/70">{(similarityResult.maxSimilarity * 100).toFixed(0)}%</p>
+                            </div>
+                          </motion.div>
+                        )}
 
                         {/* Score */}
                         <div className={`text-5xl font-bold font-mono my-3 ${isCorrect ? "text-emerald-400" : "text-white/60"}`}>

@@ -324,7 +324,7 @@ export function CultureScene({
             enableZoom={true}
             enableRotate={true}
             maxPolarAngle={Math.PI / 2}
-            minPolarAngle={0}
+            minPolarAngle={Math.PI / 9}
             minDistance={mapSize * 0.3}
             maxDistance={mapSize * 5}
           />

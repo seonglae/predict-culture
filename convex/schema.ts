@@ -68,6 +68,8 @@ export default defineSchema({
     eloChange: v.optional(v.number()),
     eloBefore: v.optional(v.number()),
     eloAfter: v.optional(v.number()),
+    similarityScore: v.optional(v.number()),
+    maxSimilarity: v.optional(v.number()),
     createdAt: v.number(),
   }).index("by_status", ["status"]),
 
