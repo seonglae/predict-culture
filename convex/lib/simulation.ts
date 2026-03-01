@@ -311,8 +311,8 @@ export function runSimulation(
         const spawnLaneCenter = (spawnLaneIdx + 0.5) * spawnLaneWidth;
         const newV: VehicleSim = {
           id: `v${nextVehicleId++}`, roadIdx: ri, forward, dist,
-          speed: (vType === "motorcycle" ? 0.8 + rng() * 0.7 : 0.5 + rng() * 0.7) * 0.5,
-          maxSpeed: vType === "motorcycle" ? 0.8 + rng() * 0.7 : 0.5 + rng() * 0.7,
+          speed: (vType === "motorcycle" ? 0.4 + rng() * 0.35 : 0.25 + rng() * 0.35) * 0.5,
+          maxSpeed: vType === "motorcycle" ? 0.4 + rng() * 0.35 : 0.25 + rng() * 0.35,
           laneOffset: spawnLaneCenter,
           width: vSz.w, length: vSz.l, aggressiveness: 0.15 + rng() * 0.45,
           state: "driving", x: 0, z: 0, heading: 0, flying: false, altitude: 0,

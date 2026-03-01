@@ -3,8 +3,10 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { TrafficScene } from "@/components/scene/TrafficScene";
 import { GlobeMini } from "./GlobeMini";
+import { AgentSidebar } from "./AgentSidebar";
 import { useSimulation } from "@/hooks/useSimulation";
 import { playCrash, playBattleBGM, warmUpAudio } from "@/lib/sfx";
+import type { Id } from "@convex/_generated/dataModel";
 
 interface Tile {
   row: number;
@@ -62,6 +64,7 @@ interface BattleSceneProps {
   shake?: (intensity?: number, duration?: number) => void;
   lat?: number;
   lon?: number;
+  battleId?: Id<"battles">;
 }
 
 export function BattleScene({
@@ -86,6 +89,7 @@ export function BattleScene({
   shake,
   lat,
   lon,
+  battleId,
 }: BattleSceneProps) {
   const [hasPredicted, setHasPredicted] = useState(false);
   const [accidentOccurred, setAccidentOccurred] = useState(false);
@@ -132,34 +136,41 @@ export function BattleScene({
   );
 
   return (
-    <div className="relative w-full h-full">
-      <GlobeMini cityName={cityName} cityLabel={cityLabel} lat={lat} lon={lon} roads={roads} tiles={tiles} gridSize={gridSize} tileSize={tileSize} />
+    <div className="flex w-full h-full">
+      <div className="relative flex-1 h-full">
+        <GlobeMini cityName={cityName} cityLabel={cityLabel} lat={lat} lon={lon} roads={roads} tiles={tiles} gridSize={gridSize} tileSize={tileSize} />
 
-      {/* Minimal prediction status */}
-      {!accidentOccurred && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-          <div className="px-4 py-2 rounded-xl bg-black/40 backdrop-blur-sm border border-white/10">
-            <p className="text-[12px] text-white/70 font-mono tracking-wide">
-              {hasPredicted ? "click again to move prediction" : "click to predict crash location"}
-            </p>
+        {!accidentOccurred && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+            <div className="px-4 py-2 rounded-xl bg-black/40 backdrop-blur-sm border border-white/10">
+              <p className="text-[12px] text-white/70 font-mono tracking-wide">
+                {hasPredicted ? "click again to move prediction" : "click to predict crash location"}
+              </p>
+            </div>
           </div>
+        )}
+
+        <TrafficScene
+          tiles={tiles}
+          gridSize={gridSize}
+          tileSize={tileSize}
+          vehicles={vehicles}
+          currentFrame={currentFrame ?? undefined}
+          predictions={predictions}
+          accidentPoint={showAccident || accidentOccurred ? accidentPoint : null}
+          onGroundClick={handleGroundClick}
+          interactive={!accidentOccurred}
+          roads={roads}
+          buildings={buildings}
+          waterPolygons={waterPolygons}
+        />
+      </div>
+
+      {battleId && (
+        <div className="w-[320px] h-full shrink-0">
+          <AgentSidebar battleId={battleId} />
         </div>
       )}
-
-      <TrafficScene
-        tiles={tiles}
-        gridSize={gridSize}
-        tileSize={tileSize}
-        vehicles={vehicles}
-        currentFrame={currentFrame ?? undefined}
-        predictions={predictions}
-        accidentPoint={showAccident || accidentOccurred ? accidentPoint : null}
-        onGroundClick={handleGroundClick}
-        interactive={!accidentOccurred}
-        roads={roads}
-        buildings={buildings}
-        waterPolygons={waterPolygons}
-      />
     </div>
   );
 }

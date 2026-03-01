@@ -243,7 +243,7 @@ function ArenaContent() {
             gridSize={sceneConfig.gridSize}
             tileSize={sceneConfig.tileSize}
             vehicles={sceneConfig.vehicles}
-            currentFrame={simulationData?.[simulationData.length - 1]}
+            currentFrame={simulationData?.[simulationData.length - 1]?.vehicles}
             predictions={buildPredictionMarkers()}
             accidentPoint={battle?.accidentPoint ?? null}
             onGroundClick={() => {}}
@@ -410,6 +410,7 @@ function ArenaContent() {
                 shake={shake}
                 lat={sceneConfig.lat}
                 lon={sceneConfig.lon}
+                battleId={battleId ?? undefined}
               />
             </motion.div>
           )}
