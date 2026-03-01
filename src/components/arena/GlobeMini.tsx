@@ -44,11 +44,8 @@ export function GlobeMini({ cityName, cityLabel, lat, lon, roads, tiles, gridSiz
     >
       {/* GTA-style minimap container */}
       <div
-        className="relative overflow-hidden border border-white/15 shadow-lg shadow-black/40"
+        className="relative overflow-hidden border border-white/15 shadow-lg shadow-black/40 rounded-full md:rounded-sm w-[120px] h-[120px] md:w-[200px] md:h-[200px]"
         style={{
-          width: 200,
-          height: 200,
-          borderRadius: 4,
           background: "#1a1f2a",
         }}
       >

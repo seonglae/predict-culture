@@ -41,11 +41,18 @@ export function CultureSidebar({ bots, messages, cultureId, enabled = true }: Cu
   const bottomRef = useRef<HTMLDivElement>(null);
   const addUserMessage = useMutation(api.cultures.addUserMessage);
 
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [collapsed, setCollapsed] = useState(true);
+
   useEffect(() => {
+    if (collapsed) return;
     if (tab === "chat") {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      const container = scrollContainerRef.current;
+      if (container) {
+        requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+      }
     }
-  }, [messages.length, tab]);
+  }, [messages.length, tab, collapsed]);
 
   const botColorMap = new Map(bots.map((b) => [b._id, b.color]));
 
@@ -69,7 +76,34 @@ export function CultureSidebar({ bots, messages, cultureId, enabled = true }: Cu
   });
 
   return (
-    <div className="h-full flex flex-col bg-[#06060c] border-l border-white/[0.06] overflow-hidden">
+    <>
+      {/* Mobile toggle — hamburger style */}
+      <button
+        onClick={() => setCollapsed((c) => !c)}
+        className="md:hidden fixed top-4 right-4 z-[200] h-10 px-3 rounded-xl bg-black/70 backdrop-blur-md border border-white/20 flex items-center gap-2 text-white/80 hover:text-white hover:bg-black/80 transition-colors shadow-lg"
+        aria-label="Toggle sidebar"
+      >
+        {collapsed ? (
+          <>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+            <span className="text-[11px] font-mono font-medium">Chat</span>
+          </>
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        )}
+      </button>
+
+      <div className={`h-full flex flex-col bg-[#06060c] border-l border-white/[0.06] overflow-hidden
+        fixed md:relative inset-0 md:inset-auto z-40 transition-transform duration-200
+        ${collapsed ? "translate-x-full md:translate-x-0" : "translate-x-0"}`}
+      >
       {/* Tab header */}
       <div className="flex border-b border-white/[0.06] shrink-0">
         <button
@@ -99,7 +133,7 @@ export function CultureSidebar({ bots, messages, cultureId, enabled = true }: Cu
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto scrollbar-thin">
         {tab === "chat" && (
           <div className="px-3 py-2 space-y-1.5">
             <AnimatePresence initial={false}>
@@ -287,5 +321,6 @@ export function CultureSidebar({ bots, messages, cultureId, enabled = true }: Cu
         </div>
       )}
     </div>
+    </>
   );
 }
