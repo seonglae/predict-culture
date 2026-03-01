@@ -33,7 +33,7 @@ interface CultureSidebarProps {
   enabled?: boolean;
 }
 
-type Tab = "chat" | "beliefs";
+type Tab = "chat" | "beliefs" | "trace";
 
 export function CultureSidebar({ bots, messages, cultureId, enabled = true }: CultureSidebarProps) {
   const [tab, setTab] = useState<Tab>("chat");
@@ -85,6 +85,14 @@ export function CultureSidebar({ bots, messages, cultureId, enabled = true }: Cu
           }`}
         >
           Beliefs
+        </button>
+        <button
+          onClick={() => setTab("trace")}
+          className={`flex-1 px-4 py-2.5 text-[12px] font-mono font-medium tracking-wide transition-colors ${
+            tab === "trace" ? "text-white/90 border-b-2 border-white/40" : "text-white/40 hover:text-white/60"
+          }`}
+        >
+          Trace
         </button>
       </div>
 
@@ -192,6 +200,49 @@ export function CultureSidebar({ bots, messages, cultureId, enabled = true }: Cu
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {tab === "trace" && (
+          <div className="px-3 py-2 space-y-1">
+            {messages.length === 0 && (
+              <div className="text-[11px] font-mono text-white/20 text-center py-8">
+                waiting for agent actions...
+              </div>
+            )}
+            {messages
+              .filter((m) => m.senderId !== "user" && m.senderId !== "system")
+              .map((msg) => {
+                const senderColor = botColorMap.get(msg.senderId) ?? "#888";
+                const isThink = msg.type === "think";
+                const isBeliefChange = msg.type === "belief_change";
+                const isSpeech = msg.type === "speech";
+
+                // Determine action icon
+                const isMove = msg.type === "move";
+                const icon = isMove ? "🚶" : isThink ? "💭" : isBeliefChange ? "🔄" : isSpeech ? "💬" : "•";
+                const label = isMove ? "move_to" : isThink ? "think" : isBeliefChange ? "change_belief" : isSpeech ? "speech" : msg.type;
+
+                return (
+                  <div
+                    key={msg._id}
+                    className="border-l-2 pl-2.5 py-1.5"
+                    style={{ borderColor: senderColor + "40" }}
+                  >
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="text-[10px]">{icon}</span>
+                      <span className="text-[9px] font-mono text-white/40">{msg.senderName}</span>
+                      <span className="text-[8px] font-mono text-white/20 px-1 py-0.5 rounded bg-white/[0.04]">{label}</span>
+                    </div>
+                    <p className={`text-[10px] font-mono leading-relaxed break-words whitespace-pre-wrap ${
+                      isThink ? "text-white/30 italic" : isBeliefChange ? "text-white/50" : "text-white/50"
+                    }`}>
+                      {msg.content.length > 200 ? msg.content.slice(0, 200) + "..." : msg.content}
+                    </p>
+                  </div>
+                );
+              })}
+            <div ref={bottomRef} />
           </div>
         )}
       </div>

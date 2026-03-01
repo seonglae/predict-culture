@@ -344,6 +344,21 @@ RULES:
                     targetZ: Math.round(finalZ * 10) / 10,
                     heading: Math.round(heading * 100) / 100,
                   });
+
+                  // Log move for trace
+                  const nearestBot = freshBots
+                    .filter((b) => b._id !== thisBot._id)
+                    .sort((a, b) => dist(finalX, finalZ, a.posX, a.posZ) - dist(finalX, finalZ, b.posX, b.posZ))[0];
+                  const moveTarget = nearestBot ? ` toward ${nearestBot.name}` : "";
+                  await ctx.runMutation(internal.cultures.addMessage, {
+                    cultureId,
+                    senderId: thisBot._id,
+                    senderName: thisBot.name,
+                    content: `move_to(${Math.round(finalX)}, ${Math.round(finalZ)})${moveTarget}`,
+                    type: "move",
+                    posX: thisBot.posX,
+                    posZ: thisBot.posZ,
+                  });
                 }
                 break;
               }
