@@ -13,10 +13,17 @@ interface Tile {
   color?: string;
 }
 
+interface BuildingFootprint {
+  polygon: { x: number; z: number }[];
+  height: number;
+  color: string;
+}
+
 interface BuildingsProps {
   tiles: Tile[];
   gridSize: number;
   tileSize: number;
+  osmBuildings?: BuildingFootprint[];
 }
 
 function easeOutBack(x: number): number {
@@ -25,21 +32,23 @@ function easeOutBack(x: number): number {
   return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
 }
 
-export function Buildings({ tiles, gridSize, tileSize }: BuildingsProps) {
+export function Buildings({ tiles, gridSize, tileSize, osmBuildings }: BuildingsProps) {
+  const hasOsmBuildings = osmBuildings && osmBuildings.length > 0;
+
+  // When OSM buildings exist, skip tile-based buildings entirely
   const buildingTiles = useMemo(
-    () => tiles.filter((t) => t.type.startsWith("building_")),
-    [tiles]
+    () => hasOsmBuildings ? [] : tiles.filter((t) => t.type.startsWith("building_")),
+    [tiles, hasOsmBuildings]
   );
+  // Also skip parks when OSM data exists (they're tile artifacts)
   const parkTiles = useMemo(
-    () => tiles.filter((t) => t.type === "park"),
-    [tiles]
+    () => hasOsmBuildings ? [] : tiles.filter((t) => t.type === "park"),
+    [tiles, hasOsmBuildings]
   );
 
   const timeRef = useRef(0);
-  const startedRef = useRef(false);
 
   useFrame((_, delta) => {
-    if (!startedRef.current) startedRef.current = true;
     timeRef.current += delta;
   });
 
@@ -47,6 +56,17 @@ export function Buildings({ tiles, gridSize, tileSize }: BuildingsProps) {
 
   return (
     <group>
+      {/* Real OSM building footprints — no rise animation */}
+      {hasOsmBuildings && osmBuildings.map((b, i) => (
+        <OSMBuilding
+          key={`osm-${i}`}
+          polygon={b.polygon}
+          height={b.height}
+          color={b.color}
+        />
+      ))}
+
+      {/* Tile-based buildings (fallback when no OSM) */}
       {buildingTiles.map((tile, i) => {
         const x = (tile.col - gridSize / 2) * tileSize + tileSize / 2;
         const z = (tile.row - gridSize / 2) * tileSize + tileSize / 2;
@@ -91,6 +111,88 @@ export function Buildings({ tiles, gridSize, tileSize }: BuildingsProps) {
   );
 }
 
+/**
+ * Extrude an OSM building polygon into a 3D mesh.
+ * No animation — just render at final position.
+ */
+function OSMBuilding({
+  polygon,
+  height,
+  color,
+}: {
+  polygon: { x: number; z: number }[];
+  height: number;
+  color: string;
+}) {
+  const geometry = useMemo(() => {
+    if (polygon.length < 3) return null;
+
+    // Create 2D shape from polygon
+    // THREE.Shape uses (x, y). We map polygon.x → shape.x, polygon.z → shape.y
+    // After rotateX(-PI/2): shape.y maps to -Z in world space
+    // So we negate polygon.z to compensate: shape.y = -polygon.z
+    const shape = new THREE.Shape();
+    shape.moveTo(polygon[0].x, -polygon[0].z);
+    for (let i = 1; i < polygon.length; i++) {
+      shape.lineTo(polygon[i].x, -polygon[i].z);
+    }
+    shape.closePath();
+
+    const geo = new THREE.ExtrudeGeometry(shape, {
+      depth: height,
+      bevelEnabled: false,
+    });
+    // Rotate from XY+Z extrusion to XZ+Y (standing up)
+    geo.rotateX(-Math.PI / 2);
+
+    return geo;
+  }, [polygon, height]);
+
+  const roofGeometry = useMemo(() => {
+    if (polygon.length < 3) return null;
+
+    const shape = new THREE.Shape();
+    shape.moveTo(polygon[0].x, -polygon[0].z);
+    for (let i = 1; i < polygon.length; i++) {
+      shape.lineTo(polygon[i].x, -polygon[i].z);
+    }
+    shape.closePath();
+
+    const geo = new THREE.ShapeGeometry(shape);
+    geo.rotateX(-Math.PI / 2);
+
+    return geo;
+  }, [polygon]);
+
+  const darkerColor = useMemo(() => {
+    const c = new THREE.Color(color);
+    c.multiplyScalar(0.75);
+    return `#${c.getHexString()}`;
+  }, [color]);
+
+  if (!geometry) return null;
+
+  return (
+    <group>
+      {/* Building body */}
+      <mesh geometry={geometry} castShadow receiveShadow>
+        <meshStandardMaterial
+          color={color}
+          roughness={0.75}
+          metalness={0.02}
+        />
+      </mesh>
+
+      {/* Roof cap */}
+      {roofGeometry && (
+        <mesh geometry={roofGeometry} position={[0, height + 0.02, 0]} castShadow>
+          <meshStandardMaterial color={darkerColor} roughness={0.8} />
+        </mesh>
+      )}
+    </group>
+  );
+}
+
 function BuildingBlock({
   x, z, height, color, tileSize, delay, timeRef, buildingType,
 }: {
@@ -117,11 +219,9 @@ function BuildingBlock({
   });
 
   const isTall = buildingType === "building_tall";
-  const isMedium = buildingType === "building_medium";
 
   return (
     <group ref={groupRef} position={[x, riseDepth, z]}>
-      {/* Main body — concrete */}
       <RoundedBox
         args={[buildingSize, height, buildingSize]}
         radius={isTall ? 0.1 : 0.15}
@@ -137,13 +237,11 @@ function BuildingBlock({
         />
       </RoundedBox>
 
-      {/* Roof ledge */}
       <mesh position={[0, height + 0.04, 0]} castShadow>
         <boxGeometry args={[buildingSize + 0.06, 0.08, buildingSize + 0.06]} />
         <meshStandardMaterial color="#9a9590" roughness={0.8} />
       </mesh>
 
-      {/* Tall buildings: glass accent band */}
       {isTall && (
         <mesh position={[0, height * 0.7, 0]}>
           <boxGeometry args={[buildingSize + 0.01, 0.3, buildingSize + 0.01]} />
@@ -157,12 +255,10 @@ function BuildingBlock({
         </mesh>
       )}
 
-      {/* Window grid — subtle lit rows */}
       {height > 2 && (
         <WindowGrid buildingSize={buildingSize} height={height} isTall={isTall} />
       )}
 
-      {/* Ground floor — darker base */}
       <mesh position={[0, 0.4, 0]}>
         <boxGeometry args={[buildingSize + 0.02, 0.8, buildingSize + 0.02]} />
         <meshStandardMaterial color="#7a7570" roughness={0.85} />
@@ -190,20 +286,16 @@ function ParkTile({
 
   return (
     <group ref={groupRef} position={[x, riseDepth, z]}>
-      {/* Ground — muted green */}
       <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[tileSize - 0.3, tileSize - 0.3]} />
         <meshStandardMaterial color="#6b8f71" roughness={0.85} />
       </mesh>
 
-      {/* Tree — Japanese style */}
       <group position={[0, 0.03, 0]}>
-        {/* Trunk */}
         <mesh position={[0, 0.3, 0]} castShadow>
           <cylinderGeometry args={[0.05, 0.07, 0.6, 6]} />
           <meshStandardMaterial color="#6b5b4a" roughness={0.9} />
         </mesh>
-        {/* Canopy — layered */}
         <mesh position={[0, 0.75, 0]} castShadow>
           <sphereGeometry args={[0.4, 8, 6]} />
           <meshStandardMaterial color="#4a6b4a" roughness={0.7} />
@@ -230,7 +322,6 @@ function WindowGrid({ buildingSize, height, isTall }: { buildingSize: number; he
         if (y > height - 0.5) return null;
         return (
           <group key={f}>
-            {/* Front face windows */}
             {Array.from({ length: windowsPerSide }).map((_, w) => {
               const xOff = (w - (windowsPerSide - 1) / 2) * (windowW + 0.08);
               return (
@@ -246,7 +337,6 @@ function WindowGrid({ buildingSize, height, isTall }: { buildingSize: number; he
                 </mesh>
               );
             })}
-            {/* Back face windows */}
             {Array.from({ length: windowsPerSide }).map((_, w) => {
               const xOff = (w - (windowsPerSide - 1) / 2) * (windowW + 0.08);
               return (

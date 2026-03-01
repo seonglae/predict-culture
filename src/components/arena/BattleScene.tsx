@@ -34,6 +34,12 @@ interface RoadSegment {
   type: "primary" | "secondary" | "residential";
 }
 
+interface BuildingFootprint {
+  polygon: { x: number; z: number }[];
+  height: number;
+  color: string;
+}
+
 interface BattleSceneProps {
   tiles: Tile[];
   gridSize: number;
@@ -50,6 +56,7 @@ interface BattleSceneProps {
   cityName?: string;
   cityLabel?: string;
   roads?: RoadSegment[];
+  buildings?: BuildingFootprint[];
   flash?: (duration?: number) => void;
   shake?: (intensity?: number, duration?: number) => void;
   lat?: number;
@@ -72,6 +79,7 @@ export function BattleScene({
   cityName,
   cityLabel,
   roads,
+  buildings,
   flash,
   shake,
   lat,
@@ -134,6 +142,7 @@ export function BattleScene({
         onGroundClick={handleGroundClick}
         interactive={!hasPredicted && !accidentOccurred}
         roads={roads}
+        buildings={buildings}
       />
     </div>
   );

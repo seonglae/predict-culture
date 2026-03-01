@@ -10,6 +10,7 @@ import type {
   SceneConfig,
   Difficulty,
   RoadSegment,
+  BuildingFootprint,
 } from "../lib/types";
 import {
   DIFFICULTY_CONFIG,
@@ -71,8 +72,10 @@ function hasConnection(type: TileType, dir: Dir): boolean {
 }
 
 interface OSMWay {
-  type: "road" | "water";
+  type: "road" | "water" | "building";
   highway?: string;
+  buildingLevels?: number;
+  buildingHeight?: number;
   nodes: { lat: number; lon: number }[];
 }
 
@@ -87,10 +90,11 @@ async function fetchOverpassData(
 ): Promise<OSMWay[]> {
   const bbox = `${minLat},${minLon},${maxLat},${maxLon}`;
   const query = `
-[out:json][timeout:10];
+[out:json][timeout:15];
 (
   way["highway"~"primary|secondary|tertiary|residential|trunk|unclassified"](${bbox});
   way["waterway"](${bbox});
+  way["building"](${bbox});
 );
 out body;
 >;
@@ -98,7 +102,7 @@ out skel qt;
 `;
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
+  const timeout = setTimeout(() => controller.abort(), 15000);
 
   try {
     const response = await fetch("https://overpass-api.de/api/interpreter", {
@@ -131,9 +135,16 @@ out skel qt;
       if (wayNodes.length < 2) continue;
 
       const isWater = el.tags?.waterway !== undefined;
+      const isBuilding = el.tags?.building !== undefined;
       ways.push({
-        type: isWater ? "water" : "road",
+        type: isBuilding ? "building" : isWater ? "water" : "road",
         highway: el.tags?.highway,
+        buildingLevels: el.tags?.["building:levels"]
+          ? parseFloat(el.tags["building:levels"])
+          : undefined,
+        buildingHeight: el.tags?.height
+          ? parseFloat(el.tags.height)
+          : undefined,
         nodes: wayNodes,
       });
     }
@@ -246,6 +257,80 @@ function osmToRoadSegments(
   }
 
   return roads;
+}
+
+/**
+ * Convert OSM building ways to world-coordinate polygon footprints.
+ */
+function osmToBuildingFootprints(
+  ways: OSMWay[],
+  centerLat: number,
+  centerLon: number,
+  gridSize: number,
+  tileSize: number,
+  metersPerTile: number,
+  mapRadius: number,
+  rng: () => number
+): BuildingFootprint[] {
+  const buildings: BuildingFootprint[] = [];
+  const colors = [
+    "#e8e4df", "#d5cfc7", "#c8c2b8", "#bfb8ae", "#d4cec5",
+    "#eae6e1", "#ccc6bc", "#e0dbd4", "#b8b2a8", "#c4bfb5",
+  ];
+
+  for (const way of ways) {
+    if (way.type !== "building") continue;
+
+    const polygon: { x: number; z: number }[] = [];
+    for (const node of way.nodes) {
+      const p = latLonToWorld(
+        node.lat,
+        node.lon,
+        centerLat,
+        centerLon,
+        gridSize,
+        tileSize,
+        metersPerTile
+      );
+      polygon.push(p);
+    }
+
+    // Skip if polygon has less than 3 points or is entirely outside map bounds
+    if (polygon.length < 3) continue;
+
+    // Check if any point is within map bounds
+    const inBounds = polygon.some(
+      (p) => Math.abs(p.x) <= mapRadius * 1.05 && Math.abs(p.z) <= mapRadius * 1.05
+    );
+    if (!inBounds) continue;
+
+    // Determine height: use OSM data if available, otherwise estimate
+    let height: number;
+    if (way.buildingHeight) {
+      // OSM height is in meters, convert to world units
+      height = (way.buildingHeight / metersPerTile) * tileSize;
+    } else if (way.buildingLevels) {
+      // ~3m per level
+      height = (way.buildingLevels * 3 / metersPerTile) * tileSize;
+    } else {
+      // Random height: small buildings 1-3, medium 3-6, occasional tall 6-10
+      const r = rng();
+      if (r < 0.6) height = 1 + rng() * 2;
+      else if (r < 0.9) height = 3 + rng() * 3;
+      else height = 6 + rng() * 4;
+    }
+
+    // Clamp height to reasonable range
+    height = Math.max(0.5, Math.min(height, 12));
+
+    buildings.push({
+      polygon,
+      height,
+      color: colors[Math.floor(rng() * colors.length)],
+    });
+  }
+
+  return buildings;
 }
 
 /**
@@ -428,6 +513,7 @@ function gridToSceneConfig(
   cityName: string,
   cityLabel: string,
   roads?: RoadSegment[],
+  osmBuildings?: BuildingFootprint[],
   lat?: number,
   lon?: number
 ): SceneConfig {
@@ -479,20 +565,36 @@ function gridToSceneConfig(
 
   if (roads && roads.length > 0) {
     // Spawn vehicles at random positions along road segments
-    for (let i = 0; i < vehicleCount; i++) {
+    // Enforce minimum distance between spawns to prevent overlap
+    const MIN_SPAWN_DIST_SQ = 4.0 * 4.0; // 4 world units min distance
+
+    const isTooClose = (nx: number, nz: number): boolean => {
+      for (const v of vehicles) {
+        const dx = v.x - nx;
+        const dz = v.z - nz;
+        if (dx * dx + dz * dz < MIN_SPAWN_DIST_SQ) return true;
+      }
+      return false;
+    };
+
+    let attempts = 0;
+    const maxAttempts = vehicleCount * 5;
+    for (let i = 0; vehicles.length < vehicleCount && attempts < maxAttempts; attempts++) {
       const road = roads[Math.floor(rng() * roads.length)];
       if (road.points.length < 2) continue;
 
-      // Pick a random segment along this road
       const segIdx = Math.floor(rng() * (road.points.length - 1));
-      const t = rng(); // interpolation parameter
+      const t = rng();
       const p0 = road.points[segIdx];
       const p1 = road.points[segIdx + 1];
 
       const x = p0.x + (p1.x - p0.x) * t;
       const z = p0.z + (p1.z - p0.z) * t;
 
-      // Heading from road direction (tangent)
+      // Skip if too close to existing vehicle
+      if (isTooClose(x, z)) continue;
+
+      // Simulation heading: direction = (sin h, -cos h), so h = atan2(dx, -dz)
       const heading = Math.atan2(p1.x - p0.x, -(p1.z - p0.z));
 
       const vType = pick(rng, vehicleTypes);
@@ -507,6 +609,7 @@ function gridToSceneConfig(
           vType === "motorcycle" ? 0.6 + rng() * 0.4 : 0.3 + rng() * 0.7,
         color: pick(rng, VEHICLE_COLORS),
       });
+      i++;
     }
   } else {
     // Fallback: spawn on road tiles
@@ -591,6 +694,7 @@ function gridToSceneConfig(
     cityName,
     cityLabel,
     ...(roads && roads.length > 0 ? { roads } : {}),
+    ...(osmBuildings && osmBuildings.length > 0 ? { buildings: osmBuildings } : {}),
     ...(lat !== undefined ? { lat } : {}),
     ...(lon !== undefined ? { lon } : {}),
   };
@@ -687,6 +791,19 @@ export const generateMapFromOSM = internalAction({
           mapRadius
         );
 
+        // Extract real building footprints
+        const buildingRng = mulberry32(mapSeed + 7777);
+        const buildingFootprints = osmToBuildingFootprints(
+          ways,
+          city.lat,
+          city.lon,
+          gridSize,
+          tileSize,
+          metersPerTile,
+          mapRadius,
+          buildingRng
+        );
+
         scene = gridToSceneConfig(
           grid,
           gridSize,
@@ -696,6 +813,7 @@ export const generateMapFromOSM = internalAction({
           city.name,
           city.label,
           roadSegments,
+          buildingFootprints,
           city.lat,
           city.lon
         );

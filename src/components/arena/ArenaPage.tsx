@@ -315,6 +315,7 @@ function ArenaContent() {
                 cityName={city ?? undefined}
                 cityLabel={cityLabel}
                 roads={sceneConfig.roads}
+                buildings={sceneConfig.buildings}
                 flash={flash}
                 shake={shake}
                 lat={sceneConfig.lat}

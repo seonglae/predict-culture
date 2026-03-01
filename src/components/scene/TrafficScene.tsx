@@ -54,6 +54,12 @@ interface RoadSegment {
   type: "primary" | "secondary" | "residential";
 }
 
+interface BuildingFootprint {
+  polygon: { x: number; z: number }[];
+  height: number;
+  color: string;
+}
+
 interface TrafficSceneProps {
   tiles: Tile[];
   gridSize: number;
@@ -65,6 +71,7 @@ interface TrafficSceneProps {
   onGroundClick?: (point: { x: number; z: number }) => void;
   interactive?: boolean;
   roads?: RoadSegment[];
+  buildings?: BuildingFootprint[];
 }
 
 // Gradient sky dome — soft urban sky
@@ -115,6 +122,7 @@ export function TrafficScene({
   onGroundClick,
   interactive = true,
   roads,
+  buildings,
 }: TrafficSceneProps) {
   const mapSize = (gridSize * tileSize) / 2;
 
@@ -157,7 +165,7 @@ export function TrafficScene({
           {/* Scene */}
           <Ground size={mapSize} onGroundClick={interactive ? onGroundClick : undefined} />
           <Roads tiles={tiles} gridSize={gridSize} tileSize={tileSize} roads={roads} />
-          <Buildings tiles={tiles} gridSize={gridSize} tileSize={tileSize} />
+          <Buildings tiles={tiles} gridSize={gridSize} tileSize={tileSize} osmBuildings={buildings} />
           <Vehicles initialVehicles={vehicles} currentFrame={currentFrame} roads={roads} />
 
           {/* Prediction markers */}

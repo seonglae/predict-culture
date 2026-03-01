@@ -50,18 +50,23 @@ const VEHICLE_DIMS: Record<string, { w: number; h: number; l: number }> = {
 
 /**
  * Project point onto nearest road polyline segment.
- * Returns snapped position and road tangent heading, or null if too far.
+ * Returns snapped position, simulation-space heading, and road width.
+ *
+ * Simulation heading convention:
+ *   direction = (sin h, -cos h)
+ *   h=0 → north (-Z), h=PI/2 → east (+X)
  */
 function snapToRoad(
   px: number,
   pz: number,
   roads: RoadSegment[],
   maxDist: number = 3.0
-): { x: number; z: number; heading: number } | null {
+): { x: number; z: number; heading: number; roadWidth: number } | null {
   let bestDist = maxDist * maxDist;
   let bestX = px;
   let bestZ = pz;
   let bestHeading = 0;
+  let bestWidth = 0.6;
 
   for (const road of roads) {
     const pts = road.points;
@@ -71,7 +76,6 @@ function snapToRoad(
       const bx = pts[i + 1].x;
       const bz = pts[i + 1].z;
 
-      // Project point onto line segment
       const dx = bx - ax;
       const dz = bz - az;
       const lenSq = dx * dx + dz * dz;
@@ -88,14 +92,16 @@ function snapToRoad(
         bestDist = distSq;
         bestX = cx;
         bestZ = cz;
-        // Heading from road tangent direction
+        // Simulation-space heading: direction (sin h, -cos h) matches (dx, dz)/len
+        // So sin h = dx/len, -cos h = dz/len → h = atan2(dx, -dz)
         bestHeading = Math.atan2(dx, -dz);
+        bestWidth = road.width;
       }
     }
   }
 
   if (bestDist >= maxDist * maxDist) return null;
-  return { x: bestX, z: bestZ, heading: bestHeading };
+  return { x: bestX, z: bestZ, heading: bestHeading, roadWidth: bestWidth };
 }
 
 export function Vehicles({ initialVehicles, currentFrame, roads }: VehiclesProps) {
@@ -105,7 +111,7 @@ export function Vehicles({ initialVehicles, currentFrame, roads }: VehiclesProps
         const frame = currentFrame?.find((f) => f.id === v.id);
         let x = frame?.x ?? v.x;
         let z = frame?.z ?? v.z;
-        let heading = frame?.heading ?? v.heading;
+        let simHeading = frame?.heading ?? v.heading;
         const isCrashed = frame?.state === "crashed";
         const dims = VEHICLE_DIMS[v.type] ?? VEHICLE_DIMS.car;
         const altitude = frame?.altitude ?? v.altitude ?? 0;
@@ -116,28 +122,42 @@ export function Vehicles({ initialVehicles, currentFrame, roads }: VehiclesProps
           if (snapped) {
             x = snapped.x;
             z = snapped.z;
-            // Pick road tangent direction (forward or reverse) closest to simulation heading
-            const simDx = Math.sin(heading);
-            const simDz = -Math.cos(heading);
-            const roadDx = Math.sin(snapped.heading);
-            const roadDz = -Math.cos(snapped.heading);
-            const dot = simDx * roadDx + simDz * roadDz;
-            heading = dot >= 0 ? snapped.heading : snapped.heading + Math.PI;
+
+            // Determine forward vs reverse on road using dot product
+            // Both in simulation space: direction = (sin h, -cos h)
+            const simDirX = Math.sin(simHeading);
+            const simDirZ = -Math.cos(simHeading);
+            const roadDirX = Math.sin(snapped.heading);
+            const roadDirZ = -Math.cos(snapped.heading);
+            const dot = simDirX * roadDirX + simDirZ * roadDirZ;
+            simHeading = dot >= 0 ? snapped.heading : snapped.heading + Math.PI;
+
+            // Lane offset: right-hand traffic
+            // Right perpendicular for sim heading h: (cos h, sin h)
+            const laneWidth = snapped.roadWidth * 0.22;
+            x += Math.cos(simHeading) * laneWidth;
+            z += Math.sin(simHeading) * laneWidth;
           }
         }
 
+        // Convert simulation heading to display rotation
+        // Sim: direction = (sin h, -cos h), h=0 → north (-Z)
+        // Display: rotation.y = r, model faces (sin r, cos r), r=0 → +Z
+        // Conversion: r = PI - h
+        const displayHeading = Math.PI - simHeading;
+
         if (v.type === "motorcycle") {
-          return <Motorcycle key={v.id} x={x} z={z} heading={heading} color={v.color} isCrashed={isCrashed} />;
+          return <Motorcycle key={v.id} x={x} z={z} heading={displayHeading} color={v.color} isCrashed={isCrashed} />;
         }
         if (v.type === "drone") {
-          return <Drone key={v.id} x={x} z={z} heading={heading} altitude={altitude} />;
+          return <Drone key={v.id} x={x} z={z} heading={displayHeading} altitude={altitude} />;
         }
         if (v.type === "helicopter") {
-          return <Helicopter key={v.id} x={x} z={z} heading={heading} altitude={altitude} color={v.color} />;
+          return <Helicopter key={v.id} x={x} z={z} heading={displayHeading} altitude={altitude} color={v.color} />;
         }
 
         return (
-          <Vehicle key={v.id} x={x} z={z} heading={heading} color={v.color} dims={dims} isCrashed={isCrashed} type={v.type} />
+          <Vehicle key={v.id} x={x} z={z} heading={displayHeading} color={v.color} dims={dims} isCrashed={isCrashed} type={v.type} />
         );
       })}
     </group>
@@ -238,7 +258,7 @@ function Vehicle({
         </mesh>
       ))}
 
-      {/* Headlights — warm white */}
+      {/* Headlights */}
       {["left", "right"].map((side, i) => (
         <mesh
           key={side}
@@ -253,7 +273,7 @@ function Vehicle({
         </mesh>
       ))}
 
-      {/* Taillights — red */}
+      {/* Taillights */}
       {["left", "right"].map((side, i) => (
         <mesh
           key={`tail-${side}`}
