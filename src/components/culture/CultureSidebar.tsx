@@ -143,8 +143,8 @@ export function CultureSidebar({ bots, messages }: CultureSidebarProps) {
         )}
 
         {tab === "beliefs" && (
-          <div className="px-3 py-2 space-y-2">
-            {/* Bot beliefs */}
+          <div className="px-3 py-2 space-y-3">
+            {/* Current bot beliefs */}
             {bots.map((bot) => {
               const changed = bot.belief !== bot.originalBelief;
               return (
@@ -172,6 +172,36 @@ export function CultureSidebar({ bots, messages }: CultureSidebarProps) {
                 </div>
               );
             })}
+
+            {/* Change history */}
+            {(() => {
+              const changes = messages.filter((m) => m.type === "belief_change");
+              if (changes.length === 0) return null;
+              return (
+                <>
+                  <div className="border-t border-white/10 pt-2 mt-2">
+                    <p className="text-[10px] font-mono text-white/30 uppercase tracking-wider mb-2">Change History</p>
+                  </div>
+                  {changes.map((msg) => {
+                    const color = botColorMap.get(msg.senderId) ?? "#888";
+                    return (
+                      <div key={msg._id} className="border-b border-white/[0.06] pb-2">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
+                          <span className="text-[10px] font-mono font-bold" style={{ color }}>{msg.senderName}</span>
+                          <span className="text-[8px] font-mono text-white/15 ml-auto">
+                            {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                          </span>
+                        </div>
+                        <p className="text-[10px] font-mono text-white/50 leading-relaxed pl-3">
+                          {msg.content}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </>
+              );
+            })()}
           </div>
         )}
       </div>
