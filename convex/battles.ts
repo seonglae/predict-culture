@@ -242,7 +242,6 @@ export const scheduleAIPrediction = internalMutation({
     const battle = await ctx.db.get(battleId);
     if (!battle || battle.status !== "active") return;
 
-    // Find AI player in this battle
     const aiPlayer = await ctx.db
       .query("players")
       .withIndex("by_browserId", (q) => q.eq("browserId", "mistral-ai-agent"))
@@ -250,7 +249,6 @@ export const scheduleAIPrediction = internalMutation({
 
     if (!aiPlayer || !battle.playerIds.includes(aiPlayer._id)) return;
 
-    // Check if AI already predicted
     const existing = await ctx.db
       .query("predictions")
       .withIndex("by_battle_player", (q) =>
@@ -260,65 +258,11 @@ export const scheduleAIPrediction = internalMutation({
 
     if (existing) return;
 
-    // AI makes a prediction based on simulation data analysis
-    // Simple heuristic: find area with most vehicle convergence
-    const frames = battle.simulationData as any[];
-    if (!frames || frames.length === 0) return;
-
-    // Analyze vehicle trajectories at ~30% through simulation
-    const analysisFrame = Math.floor(frames.length * 0.3);
-    const frame = frames[Math.min(analysisFrame, frames.length - 1)];
-    const vehicles = frame.vehicles as any[];
-
-    // Find clusters of vehicles heading toward each other
-    let bestX = 0;
-    let bestZ = 0;
-    let bestDanger = -1;
-
-    for (let i = 0; i < vehicles.length; i++) {
-      for (let j = i + 1; j < vehicles.length; j++) {
-        const vi = vehicles[i];
-        const vj = vehicles[j];
-        if (vi.state === "crashed" || vj.state === "crashed") continue;
-
-        const dx = vj.x - vi.x;
-        const dz = vj.z - vi.z;
-        const dist = Math.sqrt(dx * dx + dz * dz);
-
-        // Project headings
-        const viDirX = Math.sin(vi.heading);
-        const viDirZ = -Math.cos(vi.heading);
-        const vjDirX = Math.sin(vj.heading);
-        const vjDirZ = -Math.cos(vj.heading);
-
-        // Dot product of direction to other vehicle
-        const dotI = (dx * viDirX + dz * viDirZ) / (dist || 1);
-        const dotJ = (-dx * vjDirX + -dz * vjDirZ) / (dist || 1);
-
-        // Danger = both heading toward each other, close
-        const danger = (dotI + dotJ) / (dist * 0.5 + 1);
-
-        if (danger > bestDanger) {
-          bestDanger = danger;
-          bestX = (vi.x + vj.x) / 2;
-          bestZ = (vi.z + vj.z) / 2;
-        }
-      }
-    }
-
-    // Add some noise to not be perfect
-    const noise = 2 + Math.random() * 3;
-    bestX += (Math.random() - 0.5) * noise;
-    bestZ += (Math.random() - 0.5) * noise;
-
-    // Random timing between 2-5 seconds
-    const predictionTime = 2 + Math.random() * 3;
-
-    await ctx.db.insert("predictions", {
+    await ctx.scheduler.runAfter(0, internal.actions.mistralAgent.runMistralAgent, {
       battleId,
-      playerId: aiPlayer._id,
-      coordinates: { x: bestX, z: bestZ },
-      predictionTime,
+      frames: battle.simulationData,
+      sceneConfig: battle.sceneConfig,
+      difficulty: battle.difficulty,
     });
   },
 });
@@ -466,6 +410,35 @@ export const completeBattle = mutation({
 
     // Update leaderboard
     await ctx.scheduler.runAfter(0, internal.leaderboard.rebuildLeaderboard, {});
+  },
+});
+
+export const saveAgentLog = internalMutation({
+  args: {
+    battleId: v.id("battles"),
+    step: v.number(),
+    type: v.union(
+      v.literal("thinking"),
+      v.literal("tool_call"),
+      v.literal("tool_result"),
+      v.literal("prediction")
+    ),
+    content: v.string(),
+    toolName: v.optional(v.string()),
+    toolArgs: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert("agentLogs", { ...args, createdAt: Date.now() });
+  },
+});
+
+export const getAgentLogs = query({
+  args: { battleId: v.id("battles") },
+  handler: async (ctx, { battleId }) => {
+    return await ctx.db
+      .query("agentLogs")
+      .withIndex("by_battle_step", (q) => q.eq("battleId", battleId))
+      .collect();
   },
 });
 

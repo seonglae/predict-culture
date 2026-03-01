@@ -715,7 +715,7 @@ function respawnVehicles(
         id: `v${i}`,
         type: vType,
         x, z, heading,
-        speed: vType === "motorcycle" ? 0.8 + rng() * 0.7 : 0.5 + rng() * 0.7,
+        speed: vType === "motorcycle" ? 0.4 + rng() * 0.35 : 0.25 + rng() * 0.35,
         aggressiveness: vType === "motorcycle" ? 0.4 + rng() * 0.3 : 0.15 + rng() * 0.45,
         color: pick(rng, VEHICLE_COLORS),
       });
@@ -838,7 +838,7 @@ function gridToSceneConfig(
         x,
         z,
         heading,
-        speed: vType === "motorcycle" ? 0.8 + rng() * 0.7 : 0.5 + rng() * 0.7,
+        speed: vType === "motorcycle" ? 0.4 + rng() * 0.35 : 0.25 + rng() * 0.35,
         aggressiveness:
           vType === "motorcycle" ? 0.4 + rng() * 0.3 : 0.15 + rng() * 0.45,
         color: pick(rng, VEHICLE_COLORS),
@@ -877,7 +877,7 @@ function gridToSceneConfig(
         x,
         z,
         heading,
-        speed: vType === "motorcycle" ? 0.8 + rng() * 0.7 : 0.5 + rng() * 0.7,
+        speed: vType === "motorcycle" ? 0.4 + rng() * 0.35 : 0.25 + rng() * 0.35,
         aggressiveness:
           vType === "motorcycle" ? 0.4 + rng() * 0.3 : 0.15 + rng() * 0.45,
         color: pick(rng, VEHICLE_COLORS),

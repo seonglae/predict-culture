@@ -89,6 +89,23 @@ export default defineSchema({
     .index("by_player", ["playerId"])
     .index("by_battle", ["battleId"]),
 
+  agentLogs: defineTable({
+    battleId: v.id("battles"),
+    step: v.number(),
+    type: v.union(
+      v.literal("thinking"),
+      v.literal("tool_call"),
+      v.literal("tool_result"),
+      v.literal("prediction")
+    ),
+    content: v.string(),
+    toolName: v.optional(v.string()),
+    toolArgs: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_battle", ["battleId"])
+    .index("by_battle_step", ["battleId", "step"]),
+
   osmCache: defineTable({
     cityName: v.string(),
     lat: v.number(),
