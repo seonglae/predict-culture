@@ -112,9 +112,8 @@ export function CultureSidebar({ bots, messages, cultureId, enabled = true }: Cu
                   waiting for conversation...
                 </motion.div>
               )}
-              {messages.map((msg) => {
+              {messages.filter((m) => m.type !== "move" && m.type !== "think").map((msg) => {
                 const senderColor = botColorMap.get(msg.senderId) ?? "#888";
-                const isThink = msg.type === "think";
                 const isBeliefChange = msg.type === "belief_change";
                 const isSystem = msg.type === "system";
                 const isUser = msg.senderId === "user";
@@ -130,8 +129,6 @@ export function CultureSidebar({ bots, messages, cultureId, enabled = true }: Cu
                         ? "border-white/15 bg-white/[0.04]"
                         : isSystem
                         ? "border-white/8 bg-white/[0.03]"
-                        : isThink
-                        ? "border-white/5 bg-white/[0.02]"
                         : isUser
                         ? "border-white/15 bg-white/[0.06]"
                         : "border-white/8 bg-white/[0.02]"
@@ -147,11 +144,10 @@ export function CultureSidebar({ bots, messages, cultureId, enabled = true }: Cu
                           <span className={isUser ? "text-white/90" : isSystem ? "text-white/40" : "text-white/60"}>
                             {msg.senderName}
                           </span>
-                          {isThink && <span className="text-white/20 ml-1">(thinking)</span>}
                           {isBeliefChange && <span className="text-white/30 ml-1">changed belief</span>}
                         </div>
                         <p className={`text-[11px] font-mono leading-relaxed break-words whitespace-pre-wrap ${
-                          isThink ? "text-white/25 italic" : isBeliefChange ? "text-white/50" : "text-white/70"
+                          isBeliefChange ? "text-white/50" : "text-white/70"
                         }`}>
                           {msg.content.length > 300 ? msg.content.slice(0, 300) + "..." : msg.content}
                         </p>

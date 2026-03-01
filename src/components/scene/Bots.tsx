@@ -203,9 +203,9 @@ function Bot({ bot, speechText }: { bot: BotData; speechText?: string }) {
         </div>
       </Html>
 
-      {/* Speech bubble — fixed size regardless of zoom */}
+      {/* Speech bubble — above the bot, anchored at bottom */}
       {bubble && (
-        <Html position={[0, 2.1, 0]} center zIndexRange={[0, 0]} style={{ pointerEvents: "none" }}>
+        <Html position={[0, 2.4, 0]} zIndexRange={[0, 0]} style={{ pointerEvents: "none", transform: "translate(-50%, -100%)" }}>
           <div
             className="max-w-[280px] min-w-[140px] px-3 py-2 rounded-xl text-[10px] leading-relaxed font-mono text-white shadow-lg animate-fade-in"
             style={{
