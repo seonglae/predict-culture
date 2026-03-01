@@ -288,6 +288,10 @@ RULES:
                 x = Math.max(-mapRadius, Math.min(mapRadius, x));
                 z = Math.max(-mapRadius, Math.min(mapRadius, z));
 
+                // Skip if destination is too close to current position
+                const MIN_MOVE_DIST = 2;
+                if (dist(thisBot.posX, thisBot.posZ, x, z) < MIN_MOVE_DIST) break;
+
                 // Limit step size to MAX_STEP so bots walk gradually instead of teleporting
                 const MAX_STEP = 5;
                 const dx = x - thisBot.posX;
