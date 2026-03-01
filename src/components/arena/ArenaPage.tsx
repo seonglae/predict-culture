@@ -317,22 +317,43 @@ function ArenaContent() {
                 <p className="text-[11px] font-mono text-white/25 mb-3 uppercase tracking-wider">or pick a belief</p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl w-full mb-6">
-                  {beliefs?.map((belief, i) => (
-                    <motion.button
-                      key={i}
-                      initial={{ y: 20, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      transition={{ delay: 0.15 + 0.1 * i }}
-                      onClick={() => handlePrediction(belief)}
-                      className="px-5 py-4 rounded-xl border border-white/15 bg-black/40 backdrop-blur-sm text-left hover:bg-white/10 hover:border-white/30 transition-all group cursor-pointer"
+                  {beliefs?.map((belief, i) => {
+                    const matchingBot = bots.find((b) => b.belief === belief);
+                    const botColor = matchingBot?.color ?? "#888";
+                    return (
+                      <motion.button
+                        key={i}
+                        initial={{ y: 20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: 0.15 + 0.1 * i }}
+                        onClick={() => handlePrediction(belief)}
+                        className="px-5 py-4 rounded-xl border text-left hover:brightness-125 transition-all group cursor-pointer"
+                        style={{ backgroundColor: botColor + "25", borderColor: botColor + "50" }}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: botColor }} />
+                          <p className="text-[10px] font-mono" style={{ color: botColor }}>
+                            {matchingBot?.name ?? `Bot ${i + 1}`}
+                          </p>
+                        </div>
+                        <p className="text-[14px] font-mono text-white/80 group-hover:text-white">
+                          &quot;{belief}&quot;
+                        </p>
+                      </motion.button>
+                    );
+                  })}
+                </div>
+
+                {/* All bots with their beliefs */}
+                <div className="flex flex-wrap gap-2 justify-center max-w-xl">
+                  {bots.map((bot) => (
+                    <span
+                      key={bot._id}
+                      className="px-2.5 py-1 rounded-full text-[10px] font-mono font-medium"
+                      style={{ backgroundColor: bot.color + "20", borderColor: bot.color + "40", color: bot.color, border: `1px solid ${bot.color}40` }}
                     >
-                      <p className="text-[11px] font-mono text-white/40 mb-1 group-hover:text-white/60">
-                        I predict this will win
-                      </p>
-                      <p className="text-[14px] font-mono text-white/80 group-hover:text-white">
-                        &quot;{belief}&quot;
-                      </p>
-                    </motion.button>
+                      {bot.name}: &quot;{bot.belief}&quot;
+                    </span>
                   ))}
                 </div>
 
