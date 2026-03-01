@@ -20,6 +20,8 @@ export default defineSchema({
     beliefs: v.optional(v.array(v.string())),
     topic: v.optional(v.string()),
     userPrediction: v.optional(v.string()),
+    userBelief: v.optional(v.string()),
+    pickTime: v.optional(v.number()),
     gameStartedAt: v.optional(v.number()),
     gameDuration: v.optional(v.number()),
     finalScore: v.optional(v.number()),

@@ -46,8 +46,8 @@ export function GlobeMini({ cityName, cityLabel, lat, lon, roads, tiles, gridSiz
       <div
         className="relative overflow-hidden border border-white/15 shadow-lg shadow-black/40"
         style={{
-          width: 140,
-          height: 140,
+          width: 200,
+          height: 200,
           borderRadius: 4,
           background: "#1a1f2a",
         }}
@@ -93,7 +93,7 @@ function MiniMapRoads({ roads, tiles, gridSize, tileSize }: { roads?: RoadSegmen
       const roadTiles = tiles.filter((t) => t.type.startsWith("road_"));
       if (roadTiles.length === 0) return null;
       const pad = 8;
-      const size = 140;
+      const size = 200;
       const drawSize = size - pad * 2;
       const half = gridSize / 2;
       const paths: { d: string; width: number; type: RoadSegment["type"] }[] = [];
@@ -126,7 +126,7 @@ function MiniMapRoads({ roads, tiles, gridSize, tileSize }: { roads?: RoadSegmen
     const rangeZ = maxZ - minZ || 1;
     const range = Math.max(rangeX, rangeZ);
     const pad = 8; // px padding
-    const size = 140;
+    const size = 200;
     const drawSize = size - pad * 2;
     const centerX = (minX + maxX) / 2;
     const centerZ = (minZ + maxZ) / 2;
@@ -157,20 +157,20 @@ function MiniMapRoads({ roads, tiles, gridSize, tileSize }: { roads?: RoadSegmen
   if (!svgPaths) {
     // No road data — show placeholder grid pattern
     return (
-      <svg width={140} height={140} className="absolute inset-0">
+      <svg width={200} height={200} className="absolute inset-0">
         {/* Simple grid pattern as placeholder */}
-        {[28, 56, 84, 112].map((v) => (
-          <line key={`h${v}`} x1={0} y1={v} x2={140} y2={v} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
+        {[40, 80, 120, 160].map((v) => (
+          <line key={`h${v}`} x1={0} y1={v} x2={200} y2={v} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
         ))}
-        {[28, 56, 84, 112].map((v) => (
-          <line key={`v${v}`} x1={v} y1={0} x2={v} y2={140} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
+        {[40, 80, 120, 160].map((v) => (
+          <line key={`v${v}`} x1={v} y1={0} x2={v} y2={200} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
         ))}
       </svg>
     );
   }
 
   return (
-    <svg width={140} height={140} className="absolute inset-0">
+    <svg width={200} height={200} className="absolute inset-0">
       {/* Road outlines (darker, slightly wider) */}
       {svgPaths.map((p, i) => (
         <path

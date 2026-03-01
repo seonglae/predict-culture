@@ -337,36 +337,30 @@ Rules:
                     posZ: thisBot.posZ,
                   });
                 } else {
-                  // Check proximity to other bots
-                  let tooCloseToBot = false;
+                  // Check proximity to other bots — nudge away if too close
+                  let finalX = x;
+                  let finalZ = z;
                   for (const otherBot of freshBots) {
                     if (otherBot._id === thisBot._id) continue;
-                    if (dist(x, z, otherBot.posX, otherBot.posZ) < 1.5) {
-                      tooCloseToBot = true;
-                      break;
+                    const d = dist(finalX, finalZ, otherBot.posX, otherBot.posZ);
+                    if (d < 1.2) {
+                      // Push away from the other bot slightly
+                      const angle = Math.atan2(finalZ - otherBot.posZ, finalX - otherBot.posX);
+                      finalX = otherBot.posX + Math.cos(angle) * 1.5;
+                      finalZ = otherBot.posZ + Math.sin(angle) * 1.5;
+                      // Re-clamp
+                      finalX = Math.max(-mapRadius, Math.min(mapRadius, finalX));
+                      finalZ = Math.max(-mapRadius, Math.min(mapRadius, finalZ));
                     }
                   }
 
-                  if (tooCloseToBot) {
-                    await ctx.runMutation(internal.cultures.addMessage, {
-                      cultureId,
-                      senderId: thisBot._id,
-                      senderName: thisBot.name,
-                      content: "Can't walk there — too close to another bot!",
-                      type: "think",
-                      posX: thisBot.posX,
-                      posZ: thisBot.posZ,
-                    });
-                  } else {
-                    const heading = Math.atan2(x - thisBot.posX, -(z - thisBot.posZ));
-                    // Set target — frontend will animate the walk
-                    await ctx.runMutation(internal.cultures.setBotTarget, {
-                      botId: thisBot._id as any,
-                      targetX: Math.round(x * 10) / 10,
-                      targetZ: Math.round(z * 10) / 10,
-                      heading: Math.round(heading * 100) / 100,
-                    });
-                  }
+                  const heading = Math.atan2(finalX - thisBot.posX, -(finalZ - thisBot.posZ));
+                  await ctx.runMutation(internal.cultures.setBotTarget, {
+                    botId: thisBot._id as any,
+                    targetX: Math.round(finalX * 10) / 10,
+                    targetZ: Math.round(finalZ * 10) / 10,
+                    heading: Math.round(heading * 100) / 100,
+                  });
                 }
                 break;
               }

@@ -322,15 +322,6 @@ function ArenaContent() {
                   />
                 </div>
 
-                {/* User prediction — top right */}
-                {culture?.userPrediction && (
-                  <div className="absolute top-4 right-4 px-3 py-1.5 rounded-xl bg-violet-500/20 border border-violet-500/30 backdrop-blur-md max-w-[200px]">
-                    <span className="text-[10px] font-mono text-violet-300 block mb-0.5">Your prediction</span>
-                    <span className="text-[11px] font-mono text-white/80 line-clamp-2">
-                      &quot;{culture.userPrediction}&quot;
-                    </span>
-                  </div>
-                )}
               </div>
 
               <div className="w-[320px] h-full shrink-0">
