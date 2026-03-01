@@ -33,70 +33,70 @@ Mistral AI Worldwide Hackathon 2026
 
 ---
 
-## Prediction Is the Core of Intelligence
+## Why Prediction Matters
 
 <br>
 
 <div class="grid grid-cols-2 gap-12">
 <div>
 
-### Next Token Prediction
+### AI's Core Motivation
 
-- Language models predict the **next token**
-- But technically, a world model predicts the **next state**
-- Prediction is the fundamental motivation of AI
+- Next token prediction → next **state** prediction
+- A world model's job is to **predict what happens next**
+- Problems AI solved well: Chess, Go, protein folding, code
+- These have **structured data, clear objectives**
 
 <br>
 
-> Intelligence is compression. Compression is prediction.
+> Prediction is the fundamental motivation of AI.
 
 </div>
 <div>
 
-### Prediction Markets
+### What Remains Unsolved
 
-- Polymarket, Metaculus  - crowd-sourced forecasting
-- Markets aggregate human intuition at scale
-- But they only work on **structured, binary outcomes**
+- Why does one meme go viral and another dies?
+- Why do cultures shift overnight?
+- These require **human large-overview insight**
+- Data is messy, social, emergent
+- Prediction markets only cover **structured, binary outcomes**
 
 <br>
 
-What about **messy, social, emergent** outcomes?
+**Social dynamics remain unsolved in products.**
 
 </div>
 </div>
 
 ---
 
-## The $100M Question
+## Why Culture Wins
 
 <br>
 
 <div class="grid grid-cols-2 gap-12">
 <div>
 
-### Simile AI
+### Simile AI - $100M Proof
 
 - Raised **$100M Series A** (Stanford generative agents team)
 - Simulates human behavior at population scale
-- Enterprise platform  - locked behind closed doors
-
-<br>
-
-They proved the problem is **worth billions**.
+- Enterprise platform - locked behind closed doors
+- Proved the problem is **worth billions**
 
 </div>
 <div>
 
-### What's Missing
+### Prediction Markets
 
-- No consumer product for belief propagation
-- No interactive way to **experience** how ideas spread
-- No way to test your intuition against AI
+- Polymarket, Metaculus - crowd-sourced forecasting
+- Markets aggregate human intuition at scale
+- But only for **structured, binary outcomes**
 
 <br>
 
-**Can you predict which culture wins  - better than AI can?**
+No consumer product lets you **experience and predict** how beliefs spread in a messy, social simulation.
 
 </div>
 </div>
@@ -404,22 +404,34 @@ OSM data cached per city for fast loading.
 
 ### Extendable Platform
 
-- Swap beliefs for any domain  - politics, marketing, misinformation
+- Swap beliefs for any domain - politics, marketing, misinformation
 - Convert **real-world problems** into solvable interactive simulations
-- **Dataset generation**  - every game produces labeled belief propagation data
+- **Dataset generation** - every game produces labeled belief propagation data
 
 </div>
 <div>
 
 ### Future Directions
 
-- **Online learning**  - ML models participate as players and judges
-- **Agent trace sidebar**  - show full decision chain per bot (tool calls, reasoning, belief changes)
-- **Multiplayer**  - humans compete against each other and AI
-- **Benchmark**  - standardized test for social reasoning in LLMs
+- **Online learning** - ML models participate as players and judges
+- **Agent trace sidebar** - full decision chain per bot (tool calls, reasoning, belief changes)
+- **Multiplayer** - humans compete against each other and AI
+- **Benchmark** - standardized test for social reasoning in LLMs
 
 </div>
 </div>
+
+---
+
+## Findings
+
+<br>
+
+During testing, we observed emergent social dynamics that were never explicitly programmed:
+
+<br>
+
+Bots naturally form **local clusters** around shared beliefs. When two bots with different beliefs meet, the persuasion cascades outward - one conversion triggers nearby bots to reconsider, creating chain reactions. Over time, **spatial proximity drives consensus**: bots that walk similar streets end up holding the same belief, while isolated bots retain their original views longer. This mirrors real-world phenomena where geography shapes ideology - neighbors tend to agree, and echo chambers form not by design but by proximity.
 
 ---
 
