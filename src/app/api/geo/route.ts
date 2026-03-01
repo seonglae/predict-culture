@@ -6,7 +6,7 @@ function countryCodeToFlag(code: string): string {
 }
 
 export async function GET(req: NextRequest) {
-  const country = req.headers.get("x-vercel-ip-country") ?? req.geo?.country ?? "";
+  const country = req.headers.get("x-vercel-ip-country") ?? (req as any).geo?.country ?? "";
   const flag = country ? countryCodeToFlag(country) : "";
   return NextResponse.json({ country, flag });
 }
