@@ -11,27 +11,18 @@ export function Header() {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-3">
-      {/* Logo */}
       <Link href="/" className="flex items-center gap-2 group">
         {!isHome && (
           <span
             className="text-sm font-bold text-foreground/50 group-hover:text-foreground/70 transition-colors tracking-wider uppercase"
             style={{ fontFamily: "var(--font-display), sans-serif" }}
           >
-            PredictDrive
+            Predict Culture
           </span>
         )}
       </Link>
 
       <nav className="flex items-center gap-4">
-        <Link
-          href="/leaderboard"
-          className="text-[11px] text-foreground/40 hover:text-foreground/70 transition-colors tracking-widest uppercase font-mono"
-        >
-          Rankings
-        </Link>
-
-        {/* Theme toggle */}
         <button
           onClick={toggle}
           className="flex h-7 w-7 items-center justify-center rounded-lg text-foreground/40 hover:text-foreground/70 hover:bg-foreground/8 transition-colors cursor-pointer"

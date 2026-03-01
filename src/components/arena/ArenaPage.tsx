@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
@@ -8,230 +8,82 @@ import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import { Header } from "@/components/ui/Header";
 import { WaveField } from "@/components/ui/WaveField";
-import { ScreenEffectsProvider, useScreenEffects } from "@/components/arena/ScreenEffects";
 import { NameEntryModal } from "@/components/arena/NameEntryModal";
 import { Matchmaking } from "@/components/arena/Matchmaking";
-import { BattleScene } from "@/components/arena/BattleScene";
-import { BattleResult } from "@/components/arena/BattleResult";
+import { CultureScene } from "@/components/scene/CultureScene";
+import { CultureSidebar } from "@/components/culture/CultureSidebar";
 import { GlobeMini } from "@/components/arena/GlobeMini";
-import { AgentSidebar } from "@/components/arena/AgentSidebar";
-import { useBrowserFingerprint } from "@/hooks/useBrowserFingerprint";
-import { useTheme } from "@/components/ThemeProvider";
+import { useSpatialAudio } from "@/hooks/useSpatialAudio";
 
-type Phase = "name_entry" | "matchmaking" | "simulation" | "results";
-type Difficulty = "easy" | "normal" | "hard" | "hell";
-
-const PREDICTION_COLORS = ["#00e5c7", "#f472b6", "#8b5cf6"];
+type Phase = "name_entry" | "matchmaking" | "pick_belief" | "running" | "ended";
 
 function ArenaContent() {
-  const fingerprint = useBrowserFingerprint();
-
   const [phase, setPhase] = useState<Phase>("name_entry");
-  const [playerName, setPlayerName] = useState("");
-  const [difficulty, setDifficulty] = useState<Difficulty>("normal");
-  const [playerId, setPlayerId] = useState<Id<"players"> | null>(null);
-  const [battleId, setBattleId] = useState<Id<"battles"> | null>(null);
-  const [myPrediction, setMyPrediction] = useState<{ x: number; z: number } | null>(null);
-  const cityRef = useRef<string | null>(null);
+  const [cultureId, setCultureId] = useState<Id<"cultures"> | null>(null);
+  const [userPos] = useState({ x: 0, z: 0 });
 
-  const { flash, shake } = useScreenEffects();
+  const createCulture = useMutation(api.cultures.createCulture);
+  const submitPrediction = useMutation(api.cultures.submitPrediction);
 
-  const registerOrGet = useMutation(api.players.registerOrGet);
-  const createBattle = useMutation(api.battles.createBattle);
-  const submitPrediction = useMutation(api.predictions.submitPrediction);
-  const completeBattle = useMutation(api.battles.completeBattle);
+  const culture = useQuery(api.cultures.getCulture, cultureId ? { cultureId } : "skip");
+  const bots = useQuery(api.cultures.getBots, cultureId ? { cultureId } : "skip") ?? [];
+  const messages = useQuery(api.cultures.getMessages, cultureId ? { cultureId } : "skip") ?? [];
 
-  const battle = useQuery(
-    api.battles.getBattle,
-    battleId ? { battleId } : "skip"
-  );
-  const predictions = useQuery(
-    api.predictions.getPredictions,
-    battleId ? { battleId } : "skip"
-  );
-  const ratingChanges = useQuery(
-    api.battles.getBattleRatingChanges,
-    battleId ? { battleId } : "skip"
-  );
-  const existingPlayer = useQuery(
-    api.players.getByBrowserId,
-    fingerprint ? { browserId: fingerprint } : "skip"
-  );
+  const beliefs = culture?.beliefs as string[] | undefined;
+  const sceneConfig = culture?.sceneConfig as any;
+  const cityName = culture?.cityName as string | undefined;
+
+  const sceneReady = !!(culture && (culture.status === "pick_belief" || culture.status === "running" || culture.status === "ended"));
 
   useEffect(() => {
-    if (existingPlayer && !playerName) {
-      setPlayerName(existingPlayer.name);
-    }
-  }, [existingPlayer, playerName]);
+    if (!culture) return;
+    const s = culture.status;
+    if (s === "running") setPhase("running");
+    else if (s === "ended") setPhase("ended");
+  }, [culture?.status]);
 
-  // Lock city synchronously on first read — ref, not state, no async delay
-  const rawCityName = battle?.cityName as string | undefined;
-  if (rawCityName && !cityRef.current) {
-    cityRef.current = rawCityName;
-  }
-  const city = cityRef.current;
-
-  const opponentFound = !!(
-    city &&
-    battle &&
-    (battle.status === "simulating" || battle.status === "active" || battle.status === "completed")
-  );
+  // Spatial audio
+  useSpatialAudio(messages as any[], bots as any[], userPos, phase === "running");
 
   const handleNameSubmit = useCallback(
-    async (name: string, diff: Difficulty) => {
-      if (!fingerprint) return;
-
-      setPlayerName(name);
-      setDifficulty(diff);
-
+    async (name: string, topic: string) => {
       try {
-        const pid = await registerOrGet({ name, browserId: fingerprint });
-        setPlayerId(pid);
-
-        const bid = await createBattle({ playerId: pid, difficulty: diff });
-        setBattleId(bid);
-
+        const id = await createCulture({ topic });
+        setCultureId(id);
         setPhase("matchmaking");
       } catch (err) {
-        console.error("Failed to start battle:", err);
-        toast.error("Failed to start battle. Please try again.");
-        setPhase("name_entry");
+        console.error("Failed to start:", err);
+        toast.error("Failed to start. Please try again.");
       }
     },
-    [fingerprint, registerOrGet, createBattle]
+    [createCulture]
   );
 
-  // Detect cancelled/failed battles — auto-retry
-  const retryCountRef = useRef(0);
-  useEffect(() => {
-    if (!battle) return;
-    if (battle.status === "cancelled" && (phase === "matchmaking" || phase === "simulation")) {
-      if (retryCountRef.current >= 2) {
-        toast.error("Failed after multiple retries. Going home.");
-        retryCountRef.current = 0;
-        setBattleId(null);
-        cityRef.current = null;
-        setPhase("name_entry");
-        return;
-      }
-      retryCountRef.current++;
-      toast.error("Map generation failed. Retrying...");
-      // Auto-retry: create a new battle
-      if (playerId) {
-        setBattleId(null);
-        cityRef.current = null;
-        createBattle({ playerId, difficulty }).then((bid) => {
-          setBattleId(bid);
-        }).catch(() => {
-          toast.error("Retry failed. Going home.");
-          setPhase("name_entry");
-        });
-      }
-    }
-  }, [battle, phase, playerId, difficulty, createBattle]);
-
-  // Matchmaking timeout — if stuck for 30s, reset to name entry
-  useEffect(() => {
-    if (phase !== "matchmaking") return;
-    const timeout = setTimeout(() => {
-      toast.error("Connection timed out. Please try again.");
-      setBattleId(null);
-      cityRef.current = null;
-      setPhase("name_entry");
-    }, 30000);
-    return () => clearTimeout(timeout);
-  }, [phase]);
+  const handleFlyComplete = useCallback(() => {
+    setPhase("pick_belief");
+  }, []);
 
   const handlePrediction = useCallback(
-    async (point: { x: number; z: number }, time: number) => {
-      if (!battleId || !playerId) return;
-      setMyPrediction(point);
-      await submitPrediction({
-        battleId,
-        playerId,
-        coordinates: point,
-        predictionTime: time,
-      });
+    async (belief: string) => {
+      if (!cultureId) return;
+      await submitPrediction({ cultureId, prediction: belief });
     },
-    [battleId, playerId, submitPrediction]
+    [cultureId, submitPrediction]
   );
 
-  const handleSimulationComplete = useCallback(async () => {
-    if (!battleId) return;
-    setTimeout(async () => {
-      try {
-        const timeout = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("timeout")), 5000)
-        );
-        await Promise.race([completeBattle({ battleId }), timeout]);
-      } catch (err) {
-        console.error("Failed to complete battle:", err);
-        toast.error("Failed to save results.");
-      }
-      setPhase("results");
-    }, 1000);
-  }, [battleId, completeBattle]);
-
   const handlePlayAgain = useCallback(() => {
-    setBattleId(null);
-    setMyPrediction(null);
-    cityRef.current = null;
+    setCultureId(null);
     setPhase("name_entry");
   }, []);
 
-  const buildResults = () => {
-    if (!battle || !predictions || battle.status !== "completed") return [];
-
-    const results = battle.playerIds.map((pid: Id<"players">, i: number) => {
-      const pred = predictions.find((p: any) => p.playerId === pid);
-      const ratingChange = ratingChanges?.find((r: any) => r.playerId === pid);
-      return {
-        name: pid === playerId ? playerName : `Player ${i + 1}`,
-        score: pred?.score ?? 0,
-        distanceScore: pred?.distanceScore ?? 0,
-        timingScore: pred?.timingScore ?? 0,
-        eloChange: ratingChange ? Math.round(ratingChange.eloAfter - ratingChange.eloBefore) : 0,
-        elo: ratingChange ? Math.round(ratingChange.eloAfter) : 1500,
-        isAI: false,
-        isYou: pid === playerId,
-        placement: ratingChange?.placement ?? i,
-      };
-    });
-
-    results.sort((a, b) => b.score - a.score);
-    return results;
-  };
-
-  const buildPredictionMarkers = () => {
-    if (!predictions) return [];
-    // Before crash: only show the user's own prediction
-    // After crash (results): show all predictions
-    const showAll = battle?.status === "completed";
-    return predictions
-      .filter((p: any) => showAll || p.playerId === playerId)
-      .map((p: any, i: number) => ({
-        x: p.coordinates.x,
-        z: p.coordinates.z,
-        color: PREDICTION_COLORS[i % PREDICTION_COLORS.length],
-        label: p.playerId === playerId ? "You" : `P${i + 1}`,
-      }));
-  };
-
-  const handleFlyComplete = useCallback(() => {
-    if (battle?.status === "active") {
-      setPhase("simulation");
-    } else {
-      // Data not ready yet — wait a bit then transition
-      setTimeout(() => setPhase("simulation"), 500);
-    }
-  }, [battle]);
-
-  const sceneConfig = battle?.sceneConfig as any;
-  const simulationData = battle?.simulationData as any[];
-  const cityLabel = battle?.cityLabel as string | undefined;
+  // Latest speech for bubbles
+  const latestMessages = messages
+    .filter((m) => m.type === "speech")
+    .slice(-20)
+    .map((m) => ({ senderId: m.senderId, content: m.content, createdAt: m.createdAt }));
 
   const showWaveField = phase === "name_entry";
-  const showHeader = phase !== "simulation" && phase !== "matchmaking" && phase !== "results";
+  const showHeader = phase === "name_entry";
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -240,12 +92,12 @@ function ArenaContent() {
 
       <main className={`flex-1 relative z-10 ${showHeader ? "pt-16" : ""}`}>
         <AnimatePresence mode="wait">
+          {/* Name entry */}
           {phase === "name_entry" && (
             <div
               key="name-entry"
               className="flex-1 flex flex-col items-center justify-center min-h-[calc(100vh-4rem)]"
             >
-              {/* Hero */}
               <div className="text-center mb-12 px-4">
                 <motion.div
                   initial={{ y: -30, opacity: 0 }}
@@ -263,8 +115,8 @@ function ArenaContent() {
                     </span>
                     <br />
                     <span className="chaos-wrapper chaos-only">
-                      {"CHAOS".split("").map((ch, i) => (
-                        <span key={i} className={`chaos-letter chaos-letter-${i}`}>{ch}</span>
+                      {"CULTURE".split("").map((ch, i) => (
+                        <span key={i} className={`chaos-letter chaos-letter-${i % 5}`}>{ch}</span>
                       ))}
                     </span>
                   </h1>
@@ -274,8 +126,6 @@ function ArenaContent() {
                       position: relative;
                       cursor: default;
                     }
-
-                    /* Default: plain text, no glaze */
                     .chaos-letter {
                       display: inline-block;
                       background-image: none;
@@ -286,8 +136,6 @@ function ArenaContent() {
                       filter: none;
                       will-change: transform, filter, background-image;
                     }
-
-                    /* Hover: full chaos mode */
                     .chaos-wrapper:hover .chaos-letter {
                       background-size: 400% 400%;
                       animation: chaos-color 2s linear infinite,
@@ -318,7 +166,6 @@ function ArenaContent() {
                       animation-delay: -1.6s, -0.12s;
                       animation-duration: 2.5s, 0.2s;
                     }
-
                     @keyframes chaos-color {
                       0% { background-position: 0% 50%; filter: drop-shadow(0 0 6px rgba(255,50,100,0.4)); }
                       25% { background-position: 100% 50%; filter: drop-shadow(0 0 10px rgba(100,50,255,0.5)); }
@@ -343,86 +190,234 @@ function ArenaContent() {
                   transition={{ delay: 0.4, duration: 0.6 }}
                   className="text-[13px] text-foreground/30 tracking-[0.35em] uppercase mt-6 font-mono"
                 >
-                  observe &middot; intuition &middot; prediction
+                  predict &middot; observe &middot; score
                 </motion.p>
               </div>
 
-              <NameEntryModal
-                onSubmit={handleNameSubmit}
-                initialName={existingPlayer?.name ?? ""}
-              />
+              <NameEntryModal onSubmit={handleNameSubmit} />
             </div>
           )}
 
+          {/* Globe matchmaking transition */}
           {phase === "matchmaking" && (
             <Matchmaking
               key="matchmaking"
-              opponentFound={opponentFound}
-              selectedCity={city ?? "New York"}
+              opponentFound={sceneReady}
+              selectedCity={cityName ?? "Paris"}
               onFlyComplete={handleFlyComplete}
             />
           )}
 
-          {phase === "simulation" && sceneConfig && simulationData && battle && (
+          {/* Prediction phase — click a belief to predict the winner */}
+          {phase === "pick_belief" && sceneConfig && (
             <motion.div
-              key="simulation"
+              key="pick"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="w-full h-screen"
+              exit={{ opacity: 0 }}
+              className="relative w-full h-screen"
             >
-              <BattleScene
-                tiles={sceneConfig.tiles}
+              {/* 3D scene behind */}
+              <CultureScene
                 gridSize={sceneConfig.gridSize}
                 tileSize={sceneConfig.tileSize}
-                vehicles={sceneConfig.vehicles}
-                frames={simulationData}
-                accidentTime={battle.accidentTime ?? 10}
-                accidentFrame={battle.accidentFrame ?? 0}
-                accidentPoint={battle.accidentPoint ?? { x: 0, z: 0 }}
-                onPrediction={handlePrediction}
-                onSimulationComplete={handleSimulationComplete}
-                predictions={buildPredictionMarkers()}
-                showAccident={battle.status === "completed"}
-                cityName={city ?? undefined}
-                cityLabel={cityLabel}
                 roads={sceneConfig.roads}
                 buildings={sceneConfig.buildings}
                 waterPolygons={sceneConfig.waterPolygons}
-                flash={flash}
-                shake={shake}
-                lat={sceneConfig.lat}
-                lon={sceneConfig.lon}
-                battleId={battleId ?? undefined}
+                bots={bots}
+                latestMessages={latestMessages}
               />
+
+              {/* Overlay UI */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 backdrop-blur-[2px] px-4 overflow-y-auto py-8 z-50">
+                <motion.div
+                  initial={{ y: -20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  className="flex items-center gap-3 mb-2"
+                >
+                  <h2
+                    className="text-2xl md:text-4xl font-bold text-center text-white"
+                    style={{ fontFamily: "var(--font-display), sans-serif" }}
+                  >
+                    Which Belief Will Win?
+                  </h2>
+                  <span className="px-3 py-1 rounded-full bg-white/10 border border-white/20 text-[11px] font-mono text-white/50">
+                    {culture?.sceneConfig?.topic ?? "random"}
+                  </span>
+                </motion.div>
+                <p className="text-[13px] font-mono text-white/40 mb-6 text-center">
+                  Predict which belief will dominate. Click to submit your prediction.
+                </p>
+
+                {/* Bot beliefs overview */}
+                <div className="mb-6 text-[11px] font-mono text-white/30 text-center max-w-lg">
+                  <p className="mb-2 text-white/50">Each bot starts with a belief. Which one will spread?</p>
+                  <div className="flex flex-wrap gap-2 justify-center">
+                    {bots.map((bot) => (
+                      <span key={bot._id} className="px-2 py-1 rounded-full border border-white/10" style={{ borderColor: bot.color + "40", color: bot.color }}>
+                        {bot.name}: &quot;{bot.belief}&quot;
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl w-full">
+                  {beliefs?.map((belief, i) => (
+                    <motion.button
+                      key={i}
+                      initial={{ y: 20, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ delay: 0.1 * i }}
+                      onClick={() => handlePrediction(belief)}
+                      className="px-5 py-4 rounded-xl border border-white/15 bg-black/40 backdrop-blur-sm text-left hover:bg-white/10 hover:border-white/30 transition-all group cursor-pointer"
+                    >
+                      <p className="text-[11px] font-mono text-white/40 mb-1 group-hover:text-white/60">
+                        I predict this will win
+                      </p>
+                      <p className="text-[14px] font-mono text-white/80 group-hover:text-white">
+                        &quot;{belief}&quot;
+                      </p>
+                    </motion.button>
+                  ))}
+                </div>
+              </div>
             </motion.div>
           )}
 
-          {phase === "results" && (
-            <div key="results" className="flex w-full h-screen">
+          {/* Running — observer mode with minimap */}
+          {phase === "running" && sceneConfig && (
+            <motion.div
+              key="running"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex w-full h-screen"
+            >
               <div className="relative flex-1 h-full">
-                {sceneConfig && (
-                  <GlobeMini
-                    cityName={city ?? undefined}
-                    cityLabel={cityLabel}
-                    lat={sceneConfig.lat}
-                    lon={sceneConfig.lon}
-                    roads={sceneConfig.roads}
-                    tiles={sceneConfig.tiles}
-                    gridSize={sceneConfig.gridSize}
-                    tileSize={sceneConfig.tileSize}
+                <CultureScene
+                  gridSize={sceneConfig.gridSize}
+                  tileSize={sceneConfig.tileSize}
+                  roads={sceneConfig.roads}
+                  buildings={sceneConfig.buildings}
+                  waterPolygons={sceneConfig.waterPolygons}
+                  bots={bots}
+                  latestMessages={latestMessages}
+                />
+
+                {/* Minimap — top left */}
+                <GlobeMini
+                  cityName={sceneConfig.cityName ?? cityName}
+                  cityLabel={sceneConfig.cityLabel}
+                  lat={sceneConfig.lat}
+                  lon={sceneConfig.lon}
+                  roads={sceneConfig.roads}
+                  gridSize={sceneConfig.gridSize}
+                  tileSize={sceneConfig.tileSize}
+                />
+
+                {/* Timer — top center */}
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl bg-black/60 backdrop-blur-md border border-white/10">
+                  <GameTimer
+                    startedAt={culture?.gameStartedAt ?? 0}
+                    duration={culture?.gameDuration ?? 90000}
                   />
+                </div>
+
+                {/* User prediction — top right */}
+                {culture?.userPrediction && (
+                  <div className="absolute top-4 right-4 px-3 py-1.5 rounded-xl bg-violet-500/20 border border-violet-500/30 backdrop-blur-md max-w-[200px]">
+                    <span className="text-[10px] font-mono text-violet-300 block mb-0.5">Your prediction</span>
+                    <span className="text-[11px] font-mono text-white/80 line-clamp-2">
+                      &quot;{culture.userPrediction}&quot;
+                    </span>
+                  </div>
                 )}
-                <BattleResult
-                  results={buildResults()}
-                  onPlayAgain={handlePlayAgain}
+              </div>
+
+              <div className="w-[320px] h-full shrink-0">
+                <CultureSidebar
+                  bots={bots}
+                  messages={messages}
                 />
               </div>
-              {battleId && (
-                <div className="w-[320px] h-full shrink-0">
-                  <AgentSidebar battleId={battleId} />
+            </motion.div>
+          )}
+
+          {/* Ended — show prediction result */}
+          {phase === "ended" && (
+            <motion.div
+              key="ended"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex w-full h-screen"
+            >
+              <div className="relative flex-1 h-full">
+                {sceneConfig && (
+                  <CultureScene
+                    gridSize={sceneConfig.gridSize}
+                    tileSize={sceneConfig.tileSize}
+                    roads={sceneConfig.roads}
+                    buildings={sceneConfig.buildings}
+                    waterPolygons={sceneConfig.waterPolygons}
+                    bots={bots}
+                    latestMessages={latestMessages}
+                  />
+                )}
+
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-50">
+                  <motion.div
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.2 }}
+                    className="bg-black/80 border border-white/20 rounded-2xl px-10 py-8 text-center max-w-md"
+                  >
+                    <h2 className="text-3xl font-bold text-white mb-2" style={{ fontFamily: "var(--font-display), sans-serif" }}>
+                      Game Over
+                    </h2>
+
+                    {/* Result summary */}
+                    {culture?.resultSummary && (
+                      <p className="text-[12px] font-mono text-white/50 mb-4">
+                        {culture.resultSummary}
+                      </p>
+                    )}
+
+                    <div className="text-5xl font-bold text-emerald-400 font-mono my-4">
+                      {culture?.finalScore ?? 0}
+                    </div>
+                    <p className="text-[12px] font-mono text-white/40 mb-6">prediction score</p>
+
+                    <div className="space-y-2 mb-6 text-left">
+                      <div className="flex justify-between text-[12px] font-mono">
+                        <span className="text-white/50">Your prediction</span>
+                        <span className="text-violet-300 max-w-[180px] text-right truncate">
+                          &quot;{culture?.userPrediction ?? "—"}&quot;
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-[12px] font-mono">
+                        <span className="text-white/50">Bots with your pick</span>
+                        <span className="text-white/80">
+                          {culture?.userPrediction ? bots.filter((b) => b.belief === culture.userPrediction).length : 0}/{bots.length}
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handlePlayAgain}
+                      className="px-6 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white font-mono text-sm hover:bg-white/20 transition-colors cursor-pointer"
+                    >
+                      Play Again
+                    </button>
+                  </motion.div>
                 </div>
-              )}
-            </div>
+              </div>
+
+              <div className="w-[320px] h-full shrink-0">
+                <CultureSidebar
+                  bots={bots}
+                  messages={messages}
+                />
+              </div>
+            </motion.div>
           )}
         </AnimatePresence>
       </main>
@@ -430,10 +425,21 @@ function ArenaContent() {
   );
 }
 
-export default function ArenaPage() {
+function GameTimer({ startedAt, duration }: { startedAt: number; duration: number }) {
+  const [remaining, setRemaining] = useState(duration);
+  useEffect(() => {
+    const interval = setInterval(() => setRemaining(Math.max(0, duration - (Date.now() - startedAt))), 1000);
+    return () => clearInterval(interval);
+  }, [startedAt, duration]);
+  const mins = Math.floor(remaining / 60000);
+  const secs = Math.floor((remaining % 60000) / 1000);
   return (
-    <ScreenEffectsProvider>
-      <ArenaContent />
-    </ScreenEffectsProvider>
+    <span className={`text-[18px] font-mono font-bold ${remaining < 30000 ? "text-red-400" : "text-white/80"}`}>
+      {mins}:{secs.toString().padStart(2, "0")}
+    </span>
   );
+}
+
+export default function ArenaPage() {
+  return <ArenaContent />;
 }

@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { GeoGlobe } from "./GeoGlobe";
-import { playMatchmakingAmbient, playCityVoice, warmUpAudio } from "@/lib/sfx";
 
 const CITIES = [
   { name: "New York", label: "Times Square", lat: 40.758, lon: -73.9855 },
@@ -124,13 +123,8 @@ export function Matchmaking({
   const [countdown, setCountdown] = useState(2);
   const droneRef = useRef<{ stop: () => void } | null>(null);
 
-  // Continuous mechanical ambient hum while searching
   useEffect(() => {
-    warmUpAudio();
-    droneRef.current = playMatchmakingAmbient();
-    return () => {
-      droneRef.current?.stop();
-    };
+    return () => { droneRef.current?.stop(); };
   }, []);
 
   const cityInfo = useMemo(
@@ -138,11 +132,8 @@ export function Matchmaking({
     [selectedCity]
   );
 
-  // Play city voice when opponent found
   useEffect(() => {
     if (!opponentFound || !selectedCity) return;
-    const voice = playCityVoice(selectedCity);
-    return () => voice.stop();
   }, [opponentFound, selectedCity]);
 
   useEffect(() => {

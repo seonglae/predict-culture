@@ -8,19 +8,10 @@
  * @module
  */
 
-import type * as actions_fetchOSM from "../actions/fetchOSM.js";
-import type * as actions_mistralAgent from "../actions/mistralAgent.js";
-import type * as battles from "../battles.js";
-import type * as leaderboard from "../leaderboard.js";
+import type * as actions_cultureAgent from "../actions/cultureAgent.js";
+import type * as actions_generateCultureScene from "../actions/generateCultureScene.js";
+import type * as cultures from "../cultures.js";
 import type * as lib_cityData from "../lib/cityData.js";
-import type * as lib_elo from "../lib/elo.js";
-import type * as lib_mapGenerator from "../lib/mapGenerator.js";
-import type * as lib_rateLimits from "../lib/rateLimits.js";
-import type * as lib_scoring from "../lib/scoring.js";
-import type * as lib_simulation from "../lib/simulation.js";
-import type * as lib_types from "../lib/types.js";
-import type * as players from "../players.js";
-import type * as predictions from "../predictions.js";
 
 import type {
   ApiFromModules,
@@ -29,19 +20,10 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  "actions/fetchOSM": typeof actions_fetchOSM;
-  "actions/mistralAgent": typeof actions_mistralAgent;
-  battles: typeof battles;
-  leaderboard: typeof leaderboard;
+  "actions/cultureAgent": typeof actions_cultureAgent;
+  "actions/generateCultureScene": typeof actions_generateCultureScene;
+  cultures: typeof cultures;
   "lib/cityData": typeof lib_cityData;
-  "lib/elo": typeof lib_elo;
-  "lib/mapGenerator": typeof lib_mapGenerator;
-  "lib/rateLimits": typeof lib_rateLimits;
-  "lib/scoring": typeof lib_scoring;
-  "lib/simulation": typeof lib_simulation;
-  "lib/types": typeof lib_types;
-  players: typeof players;
-  predictions: typeof predictions;
 }>;
 
 /**
@@ -70,139 +52,4 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {
-  rateLimiter: {
-    lib: {
-      checkRateLimit: FunctionReference<
-        "query",
-        "internal",
-        {
-          config:
-            | {
-                capacity?: number;
-                kind: "token bucket";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: null;
-              }
-            | {
-                capacity?: number;
-                kind: "fixed window";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: number;
-              };
-          count?: number;
-          key?: string;
-          name: string;
-          reserve?: boolean;
-          throws?: boolean;
-        },
-        { ok: true; retryAfter?: number } | { ok: false; retryAfter: number }
-      >;
-      clearAll: FunctionReference<
-        "mutation",
-        "internal",
-        { before?: number },
-        null
-      >;
-      getServerTime: FunctionReference<"mutation", "internal", {}, number>;
-      getValue: FunctionReference<
-        "query",
-        "internal",
-        {
-          config:
-            | {
-                capacity?: number;
-                kind: "token bucket";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: null;
-              }
-            | {
-                capacity?: number;
-                kind: "fixed window";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: number;
-              };
-          key?: string;
-          name: string;
-          sampleShards?: number;
-        },
-        {
-          config:
-            | {
-                capacity?: number;
-                kind: "token bucket";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: null;
-              }
-            | {
-                capacity?: number;
-                kind: "fixed window";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: number;
-              };
-          shard: number;
-          ts: number;
-          value: number;
-        }
-      >;
-      rateLimit: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          config:
-            | {
-                capacity?: number;
-                kind: "token bucket";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: null;
-              }
-            | {
-                capacity?: number;
-                kind: "fixed window";
-                maxReserved?: number;
-                period: number;
-                rate: number;
-                shards?: number;
-                start?: number;
-              };
-          count?: number;
-          key?: string;
-          name: string;
-          reserve?: boolean;
-          throws?: boolean;
-        },
-        { ok: true; retryAfter?: number } | { ok: false; retryAfter: number }
-      >;
-      resetRateLimit: FunctionReference<
-        "mutation",
-        "internal",
-        { key?: string; name: string },
-        null
-      >;
-    };
-    time: {
-      getServerTime: FunctionReference<"mutation", "internal", {}, number>;
-    };
-  };
-};
+export declare const components: {};
