@@ -1,14 +1,16 @@
 import { v } from "convex/values";
 import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { updatePlayerRating as calcRating } from "./lib/elo";
 
 export const createCulture = mutation({
-  args: { topic: v.optional(v.string()) },
-  handler: async (ctx, { topic }) => {
+  args: { topic: v.optional(v.string()), playerName: v.optional(v.string()) },
+  handler: async (ctx, { topic, playerName }) => {
     const cultureId = await ctx.db.insert("cultures", {
       status: "loading",
       cityName: "",
       topic: topic ?? "random",
+      playerName: playerName ?? "Anonymous",
       playerCount: 1,
       maxPlayers: 5,
       predictionCount: 0,
@@ -25,8 +27,8 @@ export const createCulture = mutation({
 });
 
 export const joinOrCreateRoom = mutation({
-  args: { topic: v.optional(v.string()) },
-  handler: async (ctx, { topic }) => {
+  args: { topic: v.optional(v.string()), playerName: v.optional(v.string()) },
+  handler: async (ctx, { topic, playerName }) => {
     const t = topic ?? "random";
     const now = Date.now();
 
@@ -75,6 +77,7 @@ export const joinOrCreateRoom = mutation({
       status: "loading",
       cityName: "",
       topic: t,
+      playerName: playerName ?? "Anonymous",
       playerCount: 1,
       maxPlayers: 5,
       predictionCount: 0,
@@ -406,18 +409,78 @@ export const endGame = internalMutation({
 
     const userCorrect = userPrediction === dominantBelief;
 
+    // Rating update
+    const playerName = culture.playerName ?? "Anonymous";
+    let eloChange = 0;
+    let eloBefore = 0;
+    let eloAfter = 0;
+
+    const player = await ctx.db
+      .query("players")
+      .withIndex("by_name", (q) => q.eq("name", playerName))
+      .first();
+
+    if (player) {
+      const accuracyFactor = matchCount / total; // 0 to 1
+      const result = calcRating(
+        {
+          rating: player.elo,
+          rd: player.rd,
+          volatility: player.volatility,
+          lastMatchAt: player.lastMatchAt,
+        },
+        userCorrect,
+        accuracyFactor
+      );
+
+      eloBefore = player.elo;
+      eloAfter = result.newRating;
+      eloChange = result.eloChange;
+
+      // Update player rating
+      await ctx.db.patch(player._id, {
+        elo: result.newRating,
+        rd: result.newRd,
+        volatility: result.newVolatility,
+        matchCount: player.matchCount + 1,
+        wins: player.wins + (userCorrect ? 1 : 0),
+        losses: player.losses + (userCorrect ? 0 : 1),
+        lastMatchAt: Date.now(),
+      });
+
+      // Record history
+      await ctx.db.insert("ratingHistory", {
+        playerName,
+        cultureId,
+        eloBefore: player.elo,
+        eloAfter: result.newRating,
+        rdBefore: player.rd,
+        rdAfter: result.newRd,
+        won: userCorrect,
+        accuracyFactor,
+        eloChange: result.eloChange,
+        createdAt: Date.now(),
+      });
+    }
+
     await ctx.db.patch(cultureId, {
       status: "ended",
       finalScore,
       resultSummary,
       dominantBelief,
       dominantCount,
+      eloChange,
+      eloBefore,
+      eloAfter,
     });
 
     // Add system message
+    const ratingStr = eloChange !== 0
+      ? ` Rating: ${eloBefore} → ${eloAfter} (${eloChange > 0 ? "+" : ""}${eloChange})`
+      : "";
     const verdict = userCorrect
-      ? `You predicted correctly! Score: ${finalScore}`
-      : `Your prediction didn't win. The dominant belief was: "${dominantBelief}"`;
+      ? `You predicted correctly! Score: ${finalScore}${ratingStr}`
+      : `Your prediction didn't win. The dominant belief was: "${dominantBelief}"${ratingStr}`;
     await ctx.db.insert("cultureMessages", {
       cultureId,
       senderId: "system",

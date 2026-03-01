@@ -21,10 +21,12 @@ type Phase = "name_entry" | "matchmaking" | "pick_belief" | "running" | "ended";
 function ArenaContent() {
   const [phase, setPhase] = useState<Phase>("name_entry");
   const [cultureId, setCultureId] = useState<Id<"cultures"> | null>(null);
+  const [playerName, setPlayerName] = useState("");
   const [userPos] = useState({ x: 0, z: 0 });
   const [predictionText, setPredictionText] = useState("");
 
   const joinOrCreateRoom = useMutation(api.cultures.joinOrCreateRoom);
+  const getOrCreatePlayer = useMutation(api.players.getOrCreatePlayer);
   const submitPrediction = useMutation(api.cultures.submitPrediction);
 
   const culture = useQuery(api.cultures.getCulture, cultureId ? { cultureId } : "skip");
@@ -82,7 +84,9 @@ function ArenaContent() {
     async (name: string, topic: string) => {
       try {
         warmUpAudio();
-        const id = await joinOrCreateRoom({ topic });
+        setPlayerName(name);
+        await getOrCreatePlayer({ name });
+        const id = await joinOrCreateRoom({ topic, playerName: name });
         setCultureId(id);
         setPhase("matchmaking");
       } catch (err) {
@@ -90,7 +94,7 @@ function ArenaContent() {
         toast.error("Failed to start. Please try again.");
       }
     },
-    [joinOrCreateRoom]
+    [joinOrCreateRoom, getOrCreatePlayer]
   );
 
   const handleFlyComplete = useCallback(() => {
@@ -513,6 +517,29 @@ function ArenaContent() {
                                 ? "Perfect score! Total domination!"
                                 : "Above average — good read on the chaos"}
                         </p>
+
+                        {/* ELO Change */}
+                        {(() => {
+                          const eloChg = (culture as any)?.eloChange ?? 0;
+                          const eloBef = (culture as any)?.eloBefore ?? 0;
+                          const eloAft = (culture as any)?.eloAfter ?? 0;
+                          if (!eloBef && !eloAft) return null;
+                          return (
+                            <motion.div
+                              initial={{ opacity: 0, y: 5 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 0.8 }}
+                              className="flex items-center justify-center gap-3 mb-4"
+                            >
+                              <span className="text-[13px] font-mono text-white/40">{eloBef}</span>
+                              <span className="text-[11px] text-white/20">→</span>
+                              <span className="text-[13px] font-mono text-white/70">{eloAft}</span>
+                              <span className={`text-[14px] font-mono font-bold ${eloChg > 0 ? "text-emerald-400" : eloChg < 0 ? "text-red-400" : "text-white/40"}`}>
+                                {eloChg > 0 ? "+" : ""}{eloChg}
+                              </span>
+                            </motion.div>
+                          );
+                        })()}
 
                         {/* Details */}
                         <div className="space-y-2 mb-6 text-left border-t border-white/10 pt-4">

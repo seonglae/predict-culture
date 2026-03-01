@@ -2,6 +2,31 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
+  players: defineTable({
+    name: v.string(),
+    elo: v.number(),
+    rd: v.number(),
+    volatility: v.number(),
+    matchCount: v.number(),
+    wins: v.number(),
+    losses: v.number(),
+    lastMatchAt: v.number(),
+    createdAt: v.number(),
+  }).index("by_name", ["name"]).index("by_elo", ["elo"]),
+
+  ratingHistory: defineTable({
+    playerName: v.string(),
+    cultureId: v.id("cultures"),
+    eloBefore: v.number(),
+    eloAfter: v.number(),
+    rdBefore: v.number(),
+    rdAfter: v.number(),
+    won: v.boolean(),
+    accuracyFactor: v.number(),
+    eloChange: v.number(),
+    createdAt: v.number(),
+  }).index("by_player", ["playerName"]).index("by_culture", ["cultureId"]),
+
   osmCache: defineTable({
     cityName: v.string(),
     lat: v.number(),
@@ -32,6 +57,10 @@ export default defineSchema({
     playerCount: v.optional(v.number()),
     maxPlayers: v.optional(v.number()),
     predictionCount: v.optional(v.number()),
+    playerName: v.optional(v.string()),
+    eloChange: v.optional(v.number()),
+    eloBefore: v.optional(v.number()),
+    eloAfter: v.optional(v.number()),
     createdAt: v.number(),
   }).index("by_status", ["status"]),
 
