@@ -12,6 +12,8 @@ import type * as actions_cultureAgent from "../actions/cultureAgent.js";
 import type * as actions_generateCultureScene from "../actions/generateCultureScene.js";
 import type * as cultures from "../cultures.js";
 import type * as lib_cityData from "../lib/cityData.js";
+import type * as lib_elo from "../lib/elo.js";
+import type * as players from "../players.js";
 
 import type {
   ApiFromModules,
@@ -24,6 +26,8 @@ declare const fullApi: ApiFromModules<{
   "actions/generateCultureScene": typeof actions_generateCultureScene;
   cultures: typeof cultures;
   "lib/cityData": typeof lib_cityData;
+  "lib/elo": typeof lib_elo;
+  players: typeof players;
 }>;
 
 /**
