@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 
 interface VehicleFrame {
   id: string;
@@ -64,24 +64,32 @@ export function useSimulation({
   autoStart = false,
 }: UseSimulationOptions) {
   const [currentFrameIndex, setCurrentFrameIndex] = useState(0);
-  const [interpolatedVehicles, setInterpolatedVehicles] = useState<VehicleFrame[] | null>(null);
+  const [interpolated, setInterpolated] = useState<VehicleFrame[] | null>(null);
   const [isPlaying, setIsPlaying] = useState(autoStart);
   const [isComplete, setIsComplete] = useState(false);
+
   const animRef = useRef<number | null>(null);
-  const startTimeRef = useRef<number>(0);
-  const simTimeRef = useRef<number>(0);
-  const lastFrameIdxRef = useRef<number>(0);
+  const startTsRef = useRef(0);
+  const lastIdxRef = useRef(0);
+  const onFrameRef = useRef(onFrame);
+  const onCompleteRef = useRef(onComplete);
+  const framesRef = useRef(frames);
+  const speedRef = useRef(speed);
+
+  onFrameRef.current = onFrame;
+  onCompleteRef.current = onComplete;
+  framesRef.current = frames;
+  speedRef.current = speed;
 
   const totalFrames = frames?.length ?? 0;
   const currentTime = frames?.[currentFrameIndex]?.time ?? 0;
 
   const reset = useCallback(() => {
     setCurrentFrameIndex(0);
-    setInterpolatedVehicles(null);
+    setInterpolated(null);
     setIsPlaying(false);
     setIsComplete(false);
-    simTimeRef.current = 0;
-    lastFrameIdxRef.current = 0;
+    lastIdxRef.current = 0;
   }, []);
 
   const play = useCallback(() => {
@@ -89,62 +97,62 @@ export function useSimulation({
     setIsPlaying(true);
   }, [isComplete, reset]);
 
-  const pause = useCallback(() => {
-    setIsPlaying(false);
-  }, []);
+  const pause = useCallback(() => setIsPlaying(false), []);
+
+  const hasFrames = !!frames && frames.length >= 2;
 
   useEffect(() => {
-    if (!isPlaying || !frames || frames.length < 2) return;
+    if (!isPlaying || !hasFrames) return;
 
-    const tick = (timestamp: number) => {
-      if (startTimeRef.current === 0) startTimeRef.current = timestamp;
-      const elapsed = ((timestamp - startTimeRef.current) / 1000) * speed;
-      simTimeRef.current = elapsed;
+    startTsRef.current = 0;
+    lastIdxRef.current = 0;
 
-      const simStartTime = frames[0].time;
-      const currentSimTime = simStartTime + elapsed;
+    const tick = (ts: number) => {
+      if (startTsRef.current === 0) startTsRef.current = ts;
+
+      const f = framesRef.current;
+      if (!f || f.length < 2) return;
+
+      const elapsed = ((ts - startTsRef.current) / 1000) * speedRef.current;
+      const simTime = f[0].time + elapsed;
 
       let idxA = 0;
-      for (let i = 0; i < frames.length - 1; i++) {
-        if (frames[i + 1].time > currentSimTime) { idxA = i; break; }
+      for (let i = 0; i < f.length - 1; i++) {
+        if (f[i + 1].time > simTime) { idxA = i; break; }
         idxA = i;
       }
 
-      if (idxA >= frames.length - 1) {
-        setCurrentFrameIndex(frames.length - 1);
-        setInterpolatedVehicles(frames[frames.length - 1].vehicles);
+      if (idxA >= f.length - 1) {
+        setCurrentFrameIndex(f.length - 1);
+        setInterpolated(f[f.length - 1].vehicles);
         setIsPlaying(false);
         setIsComplete(true);
-        onComplete?.();
+        onCompleteRef.current?.();
         return;
       }
 
-      const frameA = frames[idxA];
-      const frameB = frames[idxA + 1];
-      const frameDuration = frameB.time - frameA.time;
-      const t = frameDuration > 0 ? Math.min(1, (currentSimTime - frameA.time) / frameDuration) : 0;
+      const fA = f[idxA];
+      const fB = f[idxA + 1];
+      const dur = fB.time - fA.time;
+      const t = dur > 0 ? Math.min(1, (simTime - fA.time) / dur) : 0;
 
-      setInterpolatedVehicles(interpolateFrames(frameA, frameB, t));
+      setInterpolated(interpolateFrames(fA, fB, t));
 
-      if (idxA !== lastFrameIdxRef.current) {
-        lastFrameIdxRef.current = idxA;
+      if (idxA !== lastIdxRef.current) {
+        lastIdxRef.current = idxA;
         setCurrentFrameIndex(idxA);
-        onFrame?.(idxA, frames[idxA].time);
+        onFrameRef.current?.(idxA, f[idxA].time);
       }
 
       animRef.current = requestAnimationFrame(tick);
     };
 
-    startTimeRef.current = 0;
     animRef.current = requestAnimationFrame(tick);
-
-    return () => {
-      if (animRef.current) cancelAnimationFrame(animRef.current);
-    };
-  }, [isPlaying, frames, speed, onFrame, onComplete]);
+    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
+  }, [isPlaying, hasFrames]);
 
   return {
-    currentFrame: interpolatedVehicles ?? frames?.[0]?.vehicles ?? null,
+    currentFrame: interpolated ?? frames?.[0]?.vehicles ?? null,
     currentFrameIndex,
     currentTime,
     totalFrames,
