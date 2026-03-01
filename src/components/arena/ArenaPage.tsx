@@ -13,7 +13,8 @@ import { NameEntryModal } from "@/components/arena/NameEntryModal";
 import { Matchmaking } from "@/components/arena/Matchmaking";
 import { BattleScene } from "@/components/arena/BattleScene";
 import { BattleResult } from "@/components/arena/BattleResult";
-import { TrafficScene } from "@/components/scene/TrafficScene";
+import { GlobeMini } from "@/components/arena/GlobeMini";
+import { AgentSidebar } from "@/components/arena/AgentSidebar";
 import { useBrowserFingerprint } from "@/hooks/useBrowserFingerprint";
 import { useTheme } from "@/components/ThemeProvider";
 
@@ -230,30 +231,11 @@ function ArenaContent() {
   const cityLabel = battle?.cityLabel as string | undefined;
 
   const showWaveField = phase === "name_entry";
-  const showFrozenScene = phase === "results" && sceneConfig;
-  const showHeader = phase !== "simulation" && phase !== "matchmaking";
+  const showHeader = phase !== "simulation" && phase !== "matchmaking" && phase !== "results";
 
   return (
     <div className="min-h-screen flex flex-col">
       {showWaveField && <WaveField />}
-      {showFrozenScene && (
-        <div className="fixed inset-0 z-0 opacity-40">
-          <TrafficScene
-            tiles={sceneConfig.tiles}
-            gridSize={sceneConfig.gridSize}
-            tileSize={sceneConfig.tileSize}
-            vehicles={sceneConfig.vehicles}
-            currentFrame={simulationData?.[simulationData.length - 1]?.vehicles}
-            predictions={buildPredictionMarkers()}
-            accidentPoint={battle?.accidentPoint ?? null}
-            onGroundClick={() => {}}
-            interactive={false}
-            roads={sceneConfig.roads}
-            buildings={sceneConfig.buildings}
-            waterPolygons={sceneConfig.waterPolygons}
-          />
-        </div>
-      )}
       {showHeader && <Header />}
 
       <main className={`flex-1 relative z-10 ${showHeader ? "pt-16" : ""}`}>
@@ -416,11 +398,31 @@ function ArenaContent() {
           )}
 
           {phase === "results" && (
-            <BattleResult
-              key="results"
-              results={buildResults()}
-              onPlayAgain={handlePlayAgain}
-            />
+            <div key="results" className="flex w-full h-screen">
+              <div className="relative flex-1 h-full">
+                {sceneConfig && (
+                  <GlobeMini
+                    cityName={city ?? undefined}
+                    cityLabel={cityLabel}
+                    lat={sceneConfig.lat}
+                    lon={sceneConfig.lon}
+                    roads={sceneConfig.roads}
+                    tiles={sceneConfig.tiles}
+                    gridSize={sceneConfig.gridSize}
+                    tileSize={sceneConfig.tileSize}
+                  />
+                )}
+                <BattleResult
+                  results={buildResults()}
+                  onPlayAgain={handlePlayAgain}
+                />
+              </div>
+              {battleId && (
+                <div className="w-[320px] h-full shrink-0">
+                  <AgentSidebar battleId={battleId} />
+                </div>
+              )}
+            </div>
           )}
         </AnimatePresence>
       </main>
