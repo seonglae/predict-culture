@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { useTheme } from "@/components/ThemeProvider";
+import { getTier, getTierColor } from "@/lib/tiers";
 
 export function Header() {
   const { theme, toggle } = useTheme();
@@ -52,7 +53,7 @@ export function Header() {
               <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
               <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
             </svg>
-            <span className="text-[11px] font-mono font-medium hidden sm:inline">ELO</span>
+            <span className="text-[11px] font-mono font-medium hidden sm:inline">Leaderboard</span>
           </button>
 
           {showRanking && (
@@ -64,25 +65,35 @@ export function Header() {
                 {(!leaderboard || leaderboard.length === 0) ? (
                   <p className="text-[11px] font-mono text-white/30 px-4 py-6 text-center">No players yet</p>
                 ) : (
-                  leaderboard.map((p, i) => (
-                    <div
-                      key={p._id}
-                      className="flex items-center gap-3 px-4 py-2.5 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors"
-                    >
-                      <span className={`text-[12px] font-mono font-bold w-5 text-right ${i === 0 ? "text-amber-400" : i === 1 ? "text-gray-300" : i === 2 ? "text-amber-600" : "text-white/30"}`}>
-                        {i + 1}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[12px] font-mono text-white/80 truncate">{p.name}</p>
-                        <p className="text-[10px] font-mono text-white/30">
-                          {p.wins}W {p.losses}L
-                        </p>
+                  leaderboard.map((p, i) => {
+                    const tier = getTier(p.elo);
+                    return (
+                      <div
+                        key={p._id}
+                        className="flex items-center gap-3 px-4 py-2.5 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors"
+                      >
+                        <span className={`text-[12px] font-mono font-bold w-5 text-right ${i === 0 ? "text-amber-400" : i === 1 ? "text-gray-300" : i === 2 ? "text-amber-600" : "text-white/30"}`}>
+                          {i + 1}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[12px] font-mono text-white/80 truncate">{p.name}</p>
+                          <p className={`text-[10px] font-mono ${tier.tw}`}>
+                            {tier.icon} {tier.name} - {p.wins}W {p.losses}L
+                          </p>
+                        </div>
+                        <span className="text-[13px] font-mono font-bold" style={{ color: getTierColor(p.elo) }}>{Math.round(p.elo)}</span>
                       </div>
-                      <span className="text-[13px] font-mono font-bold text-white/70">{Math.round(p.elo)}</span>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
+              <Link
+                href="/leaderboard"
+                className="block px-4 py-2.5 text-center text-[11px] font-mono text-white/40 hover:text-white/60 border-t border-white/10 transition-colors"
+                onClick={() => setShowRanking(false)}
+              >
+                View Full Leaderboard →
+              </Link>
             </div>
           )}
         </div>
