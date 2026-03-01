@@ -42,8 +42,10 @@ export function CultureSidebar({ bots, messages, cultureId, enabled = true }: Cu
   const addUserMessage = useMutation(api.cultures.addUserMessage);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+    if (tab === "chat") {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages.length, tab]);
 
   const botColorMap = new Map(bots.map((b) => [b._id, b.color]));
 
@@ -67,7 +69,7 @@ export function CultureSidebar({ bots, messages, cultureId, enabled = true }: Cu
   });
 
   return (
-    <div className="h-full flex flex-col bg-black/80 backdrop-blur-md border-l border-white/[0.06] overflow-hidden">
+    <div className="h-full flex flex-col bg-[#06060c] border-l border-white/[0.06] overflow-hidden">
       {/* Tab header */}
       <div className="flex border-b border-white/[0.06] shrink-0">
         <button
