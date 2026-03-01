@@ -320,20 +320,33 @@ RULES:
                     posZ: thisBot.posZ,
                   });
                 } else {
-                  // Check proximity to other bots — nudge away so they don't stack on the same spot
+                  // Check proximity to other bots (both current pos and target) — nudge away
                   let finalX = x;
                   let finalZ = z;
+                  const MIN_BOT_DIST = 2.0;
+                  const NUDGE_DIST = 2.5;
+                  // Collect all occupied positions (current + target)
+                  const occupied: { x: number; z: number }[] = [];
                   for (const otherBot of freshBots) {
                     if (otherBot._id === thisBot._id) continue;
-                    const d = dist(finalX, finalZ, otherBot.posX, otherBot.posZ);
-                    if (d < 2.0) {
-                      // Push away from the other bot
-                      const angle = Math.atan2(finalZ - otherBot.posZ, finalX - otherBot.posX);
-                      finalX = otherBot.posX + Math.cos(angle) * 2.5;
-                      finalZ = otherBot.posZ + Math.sin(angle) * 2.5;
-                      // Re-clamp
-                      finalX = Math.max(-mapRadius, Math.min(mapRadius, finalX));
-                      finalZ = Math.max(-mapRadius, Math.min(mapRadius, finalZ));
+                    occupied.push({ x: otherBot.posX, z: otherBot.posZ });
+                    if (otherBot.targetX !== undefined && otherBot.targetZ !== undefined) {
+                      occupied.push({ x: otherBot.targetX, z: otherBot.targetZ });
+                    }
+                  }
+                  // Multiple passes to resolve cascading overlaps
+                  for (let pass = 0; pass < 3; pass++) {
+                    for (const occ of occupied) {
+                      const d = dist(finalX, finalZ, occ.x, occ.z);
+                      if (d < MIN_BOT_DIST) {
+                        // Push away; if exactly overlapping, pick random direction
+                        let angle = Math.atan2(finalZ - occ.z, finalX - occ.x);
+                        if (d < 0.01) angle = Math.random() * Math.PI * 2;
+                        finalX = occ.x + Math.cos(angle) * NUDGE_DIST;
+                        finalZ = occ.z + Math.sin(angle) * NUDGE_DIST;
+                        finalX = Math.max(-mapRadius, Math.min(mapRadius, finalX));
+                        finalZ = Math.max(-mapRadius, Math.min(mapRadius, finalZ));
+                      }
                     }
                   }
 

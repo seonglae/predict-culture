@@ -19,16 +19,16 @@ interface BotData {
   color: string;
 }
 
-// ElevenLabs voice IDs
-const VOICE_IDS = [
-  "21m00Tcm4TlvDq8ikWAM", // Rachel
-  "AZnzlk1XvdvUeBnXmlld", // Domi
-  "EXAVITQu4vr4xnSDxMaL", // Bella
-  "ErXwobaYiN019PkySvjV", // Antoni
-  "MF3mGyEYCl7XYWbV9V6O", // Elli
-  "TxGEqnHWrfWFTfGW9XjX", // Josh
-  "VR6AewLTigWG4xSOukaG", // Arnold
-  "pNInz6obpgDQGcFmaJgB", // Adam
+// Distinct voice configs per bot slot
+const VOICE_CONFIGS: { pitch: number; rate: number }[] = [
+  { pitch: 0.8, rate: 0.95 },
+  { pitch: 1.2, rate: 1.0 },
+  { pitch: 0.9, rate: 1.05 },
+  { pitch: 1.1, rate: 0.9 },
+  { pitch: 1.0, rate: 1.1 },
+  { pitch: 0.7, rate: 0.85 },
+  { pitch: 1.3, rate: 1.0 },
+  { pitch: 0.85, rate: 0.95 },
 ];
 
 export function useSpatialAudio(
@@ -37,94 +37,72 @@ export function useSpatialAudio(
   _listenerPos: { x: number; z: number },
   enabled: boolean = true
 ) {
-  const audioCtxRef = useRef<AudioContext | null>(null);
   const processedIdsRef = useRef(new Set<string>());
-  const botVoiceMap = useRef(new Map<string, string>());
+  const botIndexMap = useRef(new Map<string, number>());
   const queueRef = useRef<SpatialMessage[]>([]);
   const playingRef = useRef(false);
+  const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
 
-  // Assign voices to bots
+  // Assign voice index to bots
   useEffect(() => {
     bots.forEach((bot, i) => {
-      if (!botVoiceMap.current.has(bot._id)) {
-        botVoiceMap.current.set(bot._id, VOICE_IDS[i % VOICE_IDS.length]);
+      if (!botIndexMap.current.has(bot._id)) {
+        botIndexMap.current.set(bot._id, i);
       }
     });
   }, [bots]);
 
-  const ensureAudioCtx = useCallback(() => {
-    if (!audioCtxRef.current) {
-      audioCtxRef.current = new AudioContext();
-    }
-    if (audioCtxRef.current.state === "suspended") {
-      audioCtxRef.current.resume();
-    }
-    return audioCtxRef.current;
+  // Cache available voices
+  useEffect(() => {
+    const loadVoices = () => {
+      voicesRef.current = speechSynthesis.getVoices();
+    };
+    loadVoices();
+    speechSynthesis.addEventListener("voiceschanged", loadVoices);
+    return () => speechSynthesis.removeEventListener("voiceschanged", loadVoices);
   }, []);
 
-  // Play TTS — no spatial panner, just direct output so everything is audible
-  const playTTS = useCallback(async (msg: SpatialMessage) => {
-    const apiKey = process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY;
-    if (!apiKey) {
-      console.warn("ElevenLabs: NEXT_PUBLIC_ELEVENLABS_API_KEY not set");
-      return;
-    }
-
-    const voiceId = botVoiceMap.current.get(msg.senderId) ?? VOICE_IDS[0];
-    const ctx = ensureAudioCtx();
-
-    try {
-      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "xi-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          text: msg.content.slice(0, 150),
-          model_id: "eleven_turbo_v2_5",
-          voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-        }),
-      });
-
-      if (!response.ok) {
-        if (response.status !== 401) console.warn("ElevenLabs TTS:", response.status);
+  const speakTTS = useCallback((msg: SpatialMessage): Promise<void> => {
+    return new Promise((resolve) => {
+      if (typeof speechSynthesis === "undefined") {
+        resolve();
         return;
       }
 
-      const arrayBuffer = await response.arrayBuffer();
-      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      const utterance = new SpeechSynthesisUtterance(msg.content.slice(0, 200));
+      const idx = botIndexMap.current.get(msg.senderId) ?? 0;
+      const cfg = VOICE_CONFIGS[idx % VOICE_CONFIGS.length];
 
-      const source = ctx.createBufferSource();
-      source.buffer = audioBuffer;
+      // Try to pick a distinct voice per bot from available voices
+      const voices = voicesRef.current;
+      const englishVoices = voices.filter((v) => v.lang.startsWith("en"));
+      if (englishVoices.length > 0) {
+        utterance.voice = englishVoices[idx % englishVoices.length];
+      }
 
-      const gain = ctx.createGain();
-      gain.gain.value = 0.7;
+      utterance.pitch = cfg.pitch;
+      utterance.rate = cfg.rate;
+      utterance.volume = 0.7;
 
-      source.connect(gain).connect(ctx.destination);
-      source.start();
+      utterance.onend = () => resolve();
+      utterance.onerror = () => resolve();
 
-      // Wait for playback to finish before next in queue
-      await new Promise<void>((resolve) => {
-        source.onended = () => resolve();
-      });
-    } catch (err) {
-      console.error("TTS error:", err);
-    }
-  }, [ensureAudioCtx]);
+      speechSynthesis.speak(utterance);
+    });
+  }, []);
 
-  // Process queue sequentially so voices don't overlap too much
+  // Process queue sequentially
   const processQueue = useCallback(async () => {
     if (playingRef.current) return;
     playingRef.current = true;
 
     while (queueRef.current.length > 0) {
       const msg = queueRef.current.shift()!;
-      await playTTS(msg);
+      await speakTTS(msg);
     }
 
     playingRef.current = false;
-  }, [playTTS]);
+  }, [speakTTS]);
 
   // Watch for new speech messages
   useEffect(() => {
@@ -140,7 +118,6 @@ export function useSpatialAudio(
       queueRef.current.push(msg);
     }
 
-    // Fire off queue processing (non-blocking)
     processQueue().catch(() => {});
 
     // Cleanup old IDs
@@ -150,9 +127,12 @@ export function useSpatialAudio(
     }
   }, [messages, enabled, processQueue]);
 
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      audioCtxRef.current?.close();
+      if (typeof speechSynthesis !== "undefined") {
+        speechSynthesis.cancel();
+      }
     };
   }, []);
 }
