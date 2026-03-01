@@ -480,9 +480,9 @@ function ArenaContent() {
               key="ended"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="flex w-full h-screen"
+              className="relative flex w-full h-screen"
             >
-              <div className="relative flex-1 h-full">
+              <div className="flex-1 h-full">
                 {sceneConfig && (
                   <>
                     <CultureScene
@@ -505,8 +505,20 @@ function ArenaContent() {
                     />
                   </>
                 )}
+              </div>
 
-                <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-50">
+              <div className="w-[320px] h-full shrink-0">
+                <CultureSidebar
+                  bots={bots}
+                  messages={messages}
+                  cultureId={cultureId ?? undefined}
+                  enabled={false}
+                />
+              </div>
+
+              {/* Results modal — global center overlay including sidebar */}
+              <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
+                <div className="pointer-events-auto">
                   {(() => {
                     const userPred = culture?.userPrediction ?? "";
                     const dominant = (culture as any)?.dominantBelief ?? "";
@@ -644,15 +656,6 @@ function ArenaContent() {
                     );
                   })()}
                 </div>
-              </div>
-
-              <div className="w-[320px] h-full shrink-0">
-                <CultureSidebar
-                  bots={bots}
-                  messages={messages}
-                  cultureId={cultureId ?? undefined}
-                  enabled={false}
-                />
               </div>
             </motion.div>
           )}
