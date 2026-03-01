@@ -407,7 +407,10 @@ export const endGame = internalMutation({
 
     const resultSummary = `Dominant belief: '${dominantBelief}' held by ${dominantCount}/${total} bots`;
 
-    const userCorrect = userPrediction === dominantBelief;
+    // Win if prediction has above-average bots (not just dominant)
+    const numBeliefs = Object.keys(beliefCounts).length;
+    const avgCount = total / Math.max(1, numBeliefs);
+    const userCorrect = matchCount >= avgCount && matchCount > 0;
 
     // Rating update
     const playerName = culture.playerName ?? "Anonymous";

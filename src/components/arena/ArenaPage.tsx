@@ -14,6 +14,7 @@ import { CultureScene } from "@/components/scene/CultureScene";
 import { CultureSidebar } from "@/components/culture/CultureSidebar";
 import { GlobeMini } from "@/components/arena/GlobeMini";
 import { useSpatialAudio } from "@/hooks/useSpatialAudio";
+import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { warmUpAudio, playCityVoice, playMatchmakingAmbient, playBattleBGM } from "@/lib/sfx";
 
 type Phase = "name_entry" | "matchmaking" | "pick_belief" | "running" | "ended";
@@ -52,6 +53,19 @@ function ArenaContent() {
 
   // Spatial audio
   useSpatialAudio(messages as any[], bots as any[], userPos, phase === "running");
+
+  // Voice recording — center bottom
+  const addUserMessage = useMutation(api.cultures.addUserMessage);
+  const handleVoiceTranscript = useCallback(
+    async (text: string) => {
+      if (!cultureId) return;
+      await addUserMessage({ cultureId, content: text, posX: 0, posZ: 0 });
+    },
+    [cultureId, addUserMessage]
+  );
+  const { isRecording, startRecording, stopRecording } = useVoiceInput({
+    onTranscript: handleVoiceTranscript,
+  });
 
   // Phase-based audio
   useEffect(() => {
@@ -412,6 +426,29 @@ function ArenaContent() {
                   cultureId={cultureId ?? undefined}
                   enabled={phase === "running"}
                 />
+              </div>
+
+              {/* Recording button — center bottom, full-width overlay */}
+              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center pointer-events-none">
+                <button
+                  onMouseDown={startRecording}
+                  onMouseUp={stopRecording}
+                  onMouseLeave={stopRecording}
+                  onTouchStart={startRecording}
+                  onTouchEnd={stopRecording}
+                  className={`pointer-events-auto w-16 h-16 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer ${
+                    isRecording
+                      ? "border-red-500 bg-red-500/30 scale-110 shadow-[0_0_30px_rgba(239,68,68,0.4)]"
+                      : "border-white/30 bg-black/60 backdrop-blur-md hover:border-white/50 hover:bg-black/70"
+                  }`}
+                >
+                  <span className={`text-2xl ${isRecording ? "text-red-400" : "text-white/60"}`}>
+                    {isRecording ? "●" : "🎤"}
+                  </span>
+                </button>
+                <p className="text-[10px] font-mono text-white/30 mt-2">
+                  {isRecording ? "Recording..." : "Hold to speak"}
+                </p>
               </div>
             </motion.div>
           )}
