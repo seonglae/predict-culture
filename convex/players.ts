@@ -3,14 +3,20 @@ import { mutation, query, internalMutation } from "./_generated/server";
 import { INITIAL_ELO, INITIAL_RD, INITIAL_VOLATILITY } from "./lib/elo";
 
 export const getOrCreatePlayer = mutation({
-  args: { name: v.string() },
-  handler: async (ctx, { name }) => {
+  args: { name: v.string(), countryFlag: v.optional(v.string()) },
+  handler: async (ctx, { name, countryFlag }) => {
     const existing = await ctx.db
       .query("players")
       .withIndex("by_name", (q) => q.eq("name", name))
       .first();
 
-    if (existing) return existing;
+    if (existing) {
+      // Update flag if provided and not yet set
+      if (countryFlag && !existing.countryFlag) {
+        await ctx.db.patch(existing._id, { countryFlag });
+      }
+      return existing;
+    }
 
     const id = await ctx.db.insert("players", {
       name,
@@ -20,6 +26,7 @@ export const getOrCreatePlayer = mutation({
       matchCount: 0,
       wins: 0,
       losses: 0,
+      countryFlag,
       lastMatchAt: Date.now(),
       createdAt: Date.now(),
     });

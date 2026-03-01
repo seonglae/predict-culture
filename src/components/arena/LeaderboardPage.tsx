@@ -196,7 +196,7 @@ export default function LeaderboardPage() {
                 </span>
 
                 <div className="min-w-0">
-                  <div className="font-medium text-white/80 truncate">{entry.name}</div>
+                  <div className="font-medium text-white/80 truncate">{(entry as any).countryFlag ? `${(entry as any).countryFlag} ` : ""}{entry.name}</div>
                   <span className={`text-[10px] font-mono ${tier.tw}`}>
                     {tier.icon} {tier.name}
                   </span>

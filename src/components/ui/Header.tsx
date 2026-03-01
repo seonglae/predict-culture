@@ -76,7 +76,7 @@ export function Header() {
                           {i + 1}
                         </span>
                         <div className="flex-1 min-w-0">
-                          <p className="text-[12px] font-mono text-white/80 truncate">{p.name}</p>
+                          <p className="text-[12px] font-mono text-white/80 truncate">{(p as any).countryFlag ? `${(p as any).countryFlag} ` : ""}{p.name}</p>
                           <p className={`text-[10px] font-mono ${tier.tw}`}>
                             {tier.icon} {tier.name} - {p.wins}W {p.losses}L
                           </p>

@@ -13,6 +13,7 @@ export default defineSchema({
     draws: v.optional(v.number()),
     isAI: v.optional(v.boolean()),
     browserId: v.optional(v.string()),
+    countryFlag: v.optional(v.string()),
     lastMatchAt: v.number(),
     createdAt: v.optional(v.number()),
   }).index("by_name", ["name"]).index("by_elo", ["elo"]),

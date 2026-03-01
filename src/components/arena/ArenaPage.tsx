@@ -117,7 +117,13 @@ function ArenaContent() {
       try {
         warmUpAudio();
         setPlayerName(name);
-        await getOrCreatePlayer({ name });
+        // Fetch country flag from geo API
+        let countryFlag: string | undefined;
+        try {
+          const geo = await fetch("/api/geo").then((r) => r.json());
+          countryFlag = geo.flag || undefined;
+        } catch {}
+        await getOrCreatePlayer({ name, countryFlag });
         const id = await joinOrCreateRoom({ topic, playerName: name });
         setCultureId(id);
         setPhase("matchmaking");
