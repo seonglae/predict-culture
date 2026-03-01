@@ -313,44 +313,33 @@ function ArenaContent() {
                   </div>
                 </motion.form>
 
-                {/* Quick pick — belief cards */}
+                {/* Quick pick — glass blur cards */}
                 <p className="text-[11px] font-mono text-white/25 mb-3 uppercase tracking-wider">or pick a belief</p>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl w-full mb-6">
-                  {beliefs?.map((belief, i) => {
-                    const matchingBot = bots.find((b) => b.belief === belief);
-                    const botColor = matchingBot?.color ?? "#888";
-                    return (
-                      <motion.button
-                        key={i}
-                        initial={{ y: 20, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        transition={{ delay: 0.15 + 0.1 * i }}
-                        onClick={() => handlePrediction(belief)}
-                        className="px-5 py-4 rounded-xl border text-left hover:brightness-125 transition-all group cursor-pointer"
-                        style={{ backgroundColor: botColor + "25", borderColor: botColor + "50" }}
-                      >
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: botColor }} />
-                          <p className="text-[10px] font-mono" style={{ color: botColor }}>
-                            {matchingBot?.name ?? `Bot ${i + 1}`}
-                          </p>
-                        </div>
-                        <p className="text-[14px] font-mono text-white/80 group-hover:text-white">
-                          &quot;{belief}&quot;
-                        </p>
-                      </motion.button>
-                    );
-                  })}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl w-full mb-4">
+                  {beliefs?.map((belief, i) => (
+                    <motion.button
+                      key={i}
+                      initial={{ y: 20, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ delay: 0.15 + 0.1 * i }}
+                      onClick={() => handlePrediction(belief)}
+                      className="px-5 py-4 rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-xl text-left hover:bg-white/[0.08] hover:border-white/20 transition-all group cursor-pointer"
+                    >
+                      <p className="text-[14px] font-mono text-white/70 group-hover:text-white/90">
+                        &quot;{belief}&quot;
+                      </p>
+                    </motion.button>
+                  ))}
                 </div>
 
-                {/* All bots with their beliefs */}
+                {/* Bot badges with colors */}
                 <div className="flex flex-wrap gap-2 justify-center max-w-xl">
                   {bots.map((bot) => (
                     <span
                       key={bot._id}
                       className="px-2.5 py-1 rounded-full text-[10px] font-mono font-medium"
-                      style={{ backgroundColor: bot.color + "20", borderColor: bot.color + "40", color: bot.color, border: `1px solid ${bot.color}40` }}
+                      style={{ backgroundColor: bot.color + "20", color: bot.color, border: `1px solid ${bot.color}40` }}
                     >
                       {bot.name}: &quot;{bot.belief}&quot;
                     </span>
@@ -443,50 +432,104 @@ function ArenaContent() {
                 )}
 
                 <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-50">
-                  <motion.div
-                    initial={{ scale: 0.8, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ delay: 0.2 }}
-                    className="bg-black/80 border border-white/20 rounded-2xl px-10 py-8 text-center max-w-md"
-                  >
-                    <h2 className="text-3xl font-bold text-white mb-2" style={{ fontFamily: "var(--font-display), sans-serif" }}>
-                      Game Over
-                    </h2>
+                  {(() => {
+                    const userPred = culture?.userPrediction ?? "";
+                    const dominant = (culture as any)?.dominantBelief ?? "";
+                    const dominantCt = (culture as any)?.dominantCount ?? 0;
+                    const isCorrect = userPred === dominant;
+                    const matchCount = userPred ? bots.filter((b) => b.belief === userPred).length : 0;
+                    const score = culture?.finalScore ?? 0;
+                    const maxScore = bots.length * 100;
+                    const dominantBot = bots.find((b) => b.belief === dominant);
 
-                    {/* Result summary */}
-                    {culture?.resultSummary && (
-                      <p className="text-[12px] font-mono text-white/50 mb-4">
-                        {culture.resultSummary}
-                      </p>
-                    )}
+                    return (
+                      <motion.div
+                        initial={{ scale: 0.8, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ delay: 0.2 }}
+                        className="bg-black/80 border border-white/20 rounded-2xl px-10 py-8 text-center max-w-lg"
+                      >
+                        {/* Verdict */}
+                        <motion.div
+                          initial={{ y: -10, opacity: 0 }}
+                          animate={{ y: 0, opacity: 1 }}
+                          transition={{ delay: 0.4 }}
+                        >
+                          <h2
+                            className={`text-3xl font-bold mb-1 ${isCorrect ? "text-emerald-400" : "text-red-400"}`}
+                            style={{ fontFamily: "var(--font-display), sans-serif" }}
+                          >
+                            {isCorrect ? "You Called It!" : "Wrong Prediction"}
+                          </h2>
+                          <p className="text-[11px] font-mono text-white/40 mb-5">
+                            {isCorrect ? "Your prediction matched the dominant belief" : "The culture war had a different winner"}
+                          </p>
+                        </motion.div>
 
-                    <div className="text-5xl font-bold text-emerald-400 font-mono my-4">
-                      {culture?.finalScore ?? 0}
-                    </div>
-                    <p className="text-[12px] font-mono text-white/40 mb-6">prediction score</p>
+                        {/* Winning belief card */}
+                        <motion.div
+                          initial={{ scale: 0.9, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          transition={{ delay: 0.6 }}
+                          className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-3 mb-5"
+                        >
+                          <p className="text-[10px] font-mono text-emerald-400/60 uppercase tracking-wider mb-1">
+                            Winning Belief — {dominantCt}/{bots.length} bots
+                          </p>
+                          <p className="text-[15px] font-mono text-emerald-300">
+                            &quot;{dominant}&quot;
+                          </p>
+                          {dominantBot && (
+                            <p className="text-[10px] font-mono text-white/30 mt-1">
+                              originated from {dominantBot.name}
+                            </p>
+                          )}
+                        </motion.div>
 
-                    <div className="space-y-2 mb-6 text-left">
-                      <div className="flex justify-between text-[12px] font-mono">
-                        <span className="text-white/50">Your prediction</span>
-                        <span className="text-violet-300 max-w-[180px] text-right truncate">
-                          &quot;{culture?.userPrediction ?? "—"}&quot;
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-[12px] font-mono">
-                        <span className="text-white/50">Bots with your pick</span>
-                        <span className="text-white/80">
-                          {culture?.userPrediction ? bots.filter((b) => b.belief === culture.userPrediction).length : 0}/{bots.length}
-                        </span>
-                      </div>
-                    </div>
+                        {/* Score */}
+                        <div className={`text-5xl font-bold font-mono my-3 ${isCorrect ? "text-emerald-400" : "text-white/60"}`}>
+                          {score}
+                          <span className="text-lg text-white/30">/{maxScore}</span>
+                        </div>
+                        <p className="text-[11px] font-mono text-white/30 mb-5">
+                          {score === 0
+                            ? "No bots ended up with your prediction"
+                            : score < maxScore / 2
+                              ? "Below average — the bots had other ideas"
+                              : score === maxScore
+                                ? "Perfect score! Total domination!"
+                                : "Above average — good read on the chaos"}
+                        </p>
 
-                    <button
-                      onClick={handlePlayAgain}
-                      className="px-6 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white font-mono text-sm hover:bg-white/20 transition-colors cursor-pointer"
-                    >
-                      Play Again
-                    </button>
-                  </motion.div>
+                        {/* Details */}
+                        <div className="space-y-2 mb-6 text-left border-t border-white/10 pt-4">
+                          <div className="flex justify-between text-[12px] font-mono">
+                            <span className="text-white/40">Your prediction</span>
+                            <span className={`max-w-[200px] text-right truncate ${isCorrect ? "text-emerald-300" : "text-red-300"}`}>
+                              &quot;{userPred || "—"}&quot;
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-[12px] font-mono">
+                            <span className="text-white/40">Bots with your pick</span>
+                            <span className="text-white/70">{matchCount}/{bots.length}</span>
+                          </div>
+                          {!isCorrect && (
+                            <div className="flex justify-between text-[12px] font-mono">
+                              <span className="text-white/40">Winning belief bots</span>
+                              <span className="text-emerald-400">{dominantCt}/{bots.length}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={handlePlayAgain}
+                          className="px-6 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white font-mono text-sm hover:bg-white/20 transition-colors cursor-pointer"
+                        >
+                          Play Again
+                        </button>
+                      </motion.div>
+                    );
+                  })()}
                 </div>
               </div>
 
