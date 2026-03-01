@@ -288,10 +288,6 @@ RULES:
                 x = Math.max(-mapRadius, Math.min(mapRadius, x));
                 z = Math.max(-mapRadius, Math.min(mapRadius, z));
 
-                // Skip if destination is too close to current position
-                const MIN_MOVE_DIST = 2;
-                if (dist(thisBot.posX, thisBot.posZ, x, z) < MIN_MOVE_DIST) break;
-
                 // Limit step size to MAX_STEP so bots walk gradually instead of teleporting
                 const MAX_STEP = 5;
                 const dx = x - thisBot.posX;
@@ -324,17 +320,17 @@ RULES:
                     posZ: thisBot.posZ,
                   });
                 } else {
-                  // Check proximity to other bots — nudge away if too close
+                  // Check proximity to other bots — nudge away so they don't stack on the same spot
                   let finalX = x;
                   let finalZ = z;
                   for (const otherBot of freshBots) {
                     if (otherBot._id === thisBot._id) continue;
                     const d = dist(finalX, finalZ, otherBot.posX, otherBot.posZ);
-                    if (d < 1.2) {
-                      // Push away from the other bot slightly
+                    if (d < 2.0) {
+                      // Push away from the other bot
                       const angle = Math.atan2(finalZ - otherBot.posZ, finalX - otherBot.posX);
-                      finalX = otherBot.posX + Math.cos(angle) * 1.5;
-                      finalZ = otherBot.posZ + Math.sin(angle) * 1.5;
+                      finalX = otherBot.posX + Math.cos(angle) * 2.5;
+                      finalZ = otherBot.posZ + Math.sin(angle) * 2.5;
                       // Re-clamp
                       finalX = Math.max(-mapRadius, Math.min(mapRadius, finalX));
                       finalZ = Math.max(-mapRadius, Math.min(mapRadius, finalZ));
