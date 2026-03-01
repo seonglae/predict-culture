@@ -275,7 +275,7 @@ function ArenaContent() {
                     Which Belief Will Win?
                   </h2>
                   <span className="px-3 py-1 rounded-full bg-white/10 border border-white/20 text-[11px] font-mono text-white/50">
-                    {culture?.sceneConfig?.topic ?? "random"}
+                    {culture?.topic ?? "random"}
                   </span>
                 </motion.div>
                 <p className="text-[13px] font-mono text-white/40 mb-6 text-center">
