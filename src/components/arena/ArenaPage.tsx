@@ -318,46 +318,29 @@ function ArenaContent() {
                   </span>
                 </motion.div>
                 <p className="text-[13px] font-mono text-white/40 mb-2 text-center">
-                  What will happen? Type your prediction or pick a belief below.
+                  6 AI bots will debate and persuade each other. Which belief will dominate?
                 </p>
                 <p className="text-[11px] font-mono text-white/25 mb-6 text-center">
                   {culture?.predictionCount ?? 0}/{culture?.maxPlayers ?? 5} predictions submitted
                 </p>
 
-                {/* Prediction text input */}
-                <motion.form
-                  initial={{ y: 10, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.1 }}
-                  className="w-full max-w-xl mb-6"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (predictionText.trim()) handlePrediction(predictionText.trim());
-                  }}
-                >
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={predictionText}
-                      onChange={(e) => setPredictionText(e.target.value)}
-                      placeholder="e.g. &quot;All bots will believe pineapple is sacred&quot;"
-                      className="flex-1 px-4 py-3 rounded-xl border border-white/20 bg-black/50 backdrop-blur-sm text-[14px] font-mono text-white placeholder:text-white/25 focus:outline-none focus:border-white/40 transition-colors"
-                      autoFocus
-                    />
-                    <button
-                      type="submit"
-                      disabled={!predictionText.trim()}
-                      className="px-5 py-3 rounded-xl bg-white/15 border border-white/20 text-[13px] font-mono font-bold text-white hover:bg-white/25 transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                {/* Bot badges with colors */}
+                <div className="flex flex-wrap gap-2 justify-center max-w-xl mb-5">
+                  {bots.map((bot) => (
+                    <span
+                      key={bot._id}
+                      className="px-2.5 py-1 rounded-full text-[11px] font-mono font-medium"
+                      style={{ backgroundColor: bot.color + "20", color: bot.color, border: `1px solid ${bot.color}40` }}
                     >
-                      Submit
-                    </button>
-                  </div>
-                </motion.form>
+                      {bot.name}
+                    </span>
+                  ))}
+                </div>
 
-                {/* Quick pick — glass blur cards */}
-                <p className="text-[11px] font-mono text-white/25 mb-3 uppercase tracking-wider">or pick a belief</p>
+                {/* Starting beliefs — tap to predict */}
+                <p className="text-[11px] font-mono text-white/25 mb-3 uppercase tracking-wider">Starting Beliefs — tap to predict the winner</p>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl w-full mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl w-full mb-5">
                   {beliefs?.map((belief, i) => {
                     const matchingBot = bots.find((b) => b.belief === belief);
                     return (
@@ -380,18 +363,35 @@ function ArenaContent() {
                   })}
                 </div>
 
-                {/* Bot badges with colors */}
-                <div className="flex flex-wrap gap-2 justify-center max-w-xl">
-                  {bots.map((bot) => (
-                    <span
-                      key={bot._id}
-                      className="px-2.5 py-1 rounded-full text-[10px] font-mono font-medium"
-                      style={{ backgroundColor: bot.color + "20", color: bot.color, border: `1px solid ${bot.color}40` }}
+                {/* Or type custom prediction */}
+                <p className="text-[11px] font-mono text-white/20 mb-2 uppercase tracking-wider">or type your own prediction</p>
+                <motion.form
+                  initial={{ y: 10, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.1 }}
+                  className="w-full max-w-xl"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (predictionText.trim()) handlePrediction(predictionText.trim());
+                  }}
+                >
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={predictionText}
+                      onChange={(e) => setPredictionText(e.target.value)}
+                      placeholder="e.g. &quot;BBQ culture will win over everyone&quot;"
+                      className="flex-1 px-4 py-3 rounded-xl border border-white/20 bg-black/50 backdrop-blur-sm text-[14px] font-mono text-white placeholder:text-white/25 focus:outline-none focus:border-white/40 transition-colors"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!predictionText.trim()}
+                      className="px-5 py-3 rounded-xl bg-white/15 border border-white/20 text-[13px] font-mono font-bold text-white hover:bg-white/25 transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                     >
-                      {bot.name}: &quot;{bot.belief}&quot;
-                    </span>
-                  ))}
-                </div>
+                      Submit
+                    </button>
+                  </div>
+                </motion.form>
 
               </div>
             </motion.div>

@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
 
     const formData = new FormData();
     formData.append("file", blob, "audio.webm");
-    formData.append("model", "mistral-large-latest");
+    formData.append("model", "voxtral-mini-latest");
 
     // Try Mistral audio transcription API
     const response = await fetch("https://api.mistral.ai/v1/audio/transcriptions", {
