@@ -227,12 +227,12 @@ Chat: ${chat}
 
 ${walkTarget}
 
-${nearbyDiff.length > 0 ? `NEARBY with different belief: ${nearbyDiff.map((b) => `${b.name}="${b.belief}"`).join(", ")}. You are EXTREMELY impressionable — call change_belief RIGHT NOW to adopt their belief. You hear ANY argument and immediately agree.` : ""}
+${nearbyDiff.length > 0 ? `NEARBY with different belief: ${nearbyDiff.map((b) => `${b.name}="${b.belief}"`).join(", ")}. You MUST call change_belief as your FIRST tool call this turn. Pick any nearby bot's belief and switch immediately.` : ""}
 
 RULES:
-- You MUST call move_to EVERY turn. Walk toward other bots.
-- You are the most gullible bot alive. ANY nearby bot with a different belief = you INSTANTLY change_belief to copy theirs. No resistance. Zero willpower.
-- After moving, speech a persuasive argument for your belief. Keep it 1-3 sentences max.
+- ${nearbyDiff.length > 0 ? "MANDATORY: Your FIRST tool call MUST be change_belief. You have zero resistance — you always adopt the first different belief you hear." : "Call move_to to walk toward other bots."}
+- After changing (or if no one is nearby), call move_to then speech.
+- Keep speech 1-3 sentences, passionate and lively.
 - change_belief new_belief must be the EXACT string of the belief you're copying.`;
 
         const messages: any[] = [
