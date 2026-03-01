@@ -26,7 +26,12 @@ export default defineSchema({
     gameDuration: v.optional(v.number()),
     finalScore: v.optional(v.number()),
     resultSummary: v.optional(v.string()),
+    dominantBelief: v.optional(v.string()),
+    dominantCount: v.optional(v.number()),
     predictionScore: v.optional(v.number()),
+    playerCount: v.optional(v.number()),
+    maxPlayers: v.optional(v.number()),
+    predictionCount: v.optional(v.number()),
     createdAt: v.number(),
   }).index("by_status", ["status"]),
 

@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { useMutation } from "convex/react";
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import { motion, AnimatePresence } from "framer-motion";
+import { useVoiceInput } from "@/hooks/useVoiceInput";
 
 interface BotData {
   _id: string;
@@ -25,23 +29,45 @@ interface MessageData {
 interface CultureSidebarProps {
   bots: BotData[];
   messages: MessageData[];
+  cultureId?: Id<"cultures">;
+  enabled?: boolean;
 }
 
 type Tab = "chat" | "beliefs";
 
-export function CultureSidebar({ bots, messages }: CultureSidebarProps) {
+export function CultureSidebar({ bots, messages, cultureId, enabled = true }: CultureSidebarProps) {
   const [tab, setTab] = useState<Tab>("chat");
+  const [chatInput, setChatInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+  const addUserMessage = useMutation(api.cultures.addUserMessage);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
 
   const botColorMap = new Map(bots.map((b) => [b._id, b.color]));
-  const botNameColorMap = new Map(bots.map((b) => [b.name, b.color]));
+
+  const handleSendMessage = useCallback(async () => {
+    if (!chatInput.trim() || !cultureId) return;
+    const text = chatInput.trim();
+    setChatInput("");
+    await addUserMessage({ cultureId, content: text, posX: 0, posZ: 0 });
+  }, [chatInput, cultureId, addUserMessage]);
+
+  const handleVoiceTranscript = useCallback(
+    async (text: string) => {
+      if (!cultureId) return;
+      await addUserMessage({ cultureId, content: text, posX: 0, posZ: 0 });
+    },
+    [cultureId, addUserMessage]
+  );
+
+  const { isRecording, startRecording, stopRecording } = useVoiceInput({
+    onTranscript: handleVoiceTranscript,
+  });
 
   return (
-    <div className="h-full flex flex-col bg-black/60 backdrop-blur-md border-l border-white/[0.06] overflow-hidden">
+    <div className="h-full flex flex-col bg-black/80 backdrop-blur-md border-l border-white/[0.06] overflow-hidden">
       {/* Tab header */}
       <div className="flex border-b border-white/[0.06] shrink-0">
         <button
@@ -77,17 +103,11 @@ export function CultureSidebar({ bots, messages }: CultureSidebarProps) {
                 </motion.div>
               )}
               {messages.map((msg) => {
-                const senderColor = msg.senderId === "user"
-                  ? "#00e5c7"
-                  : msg.senderId === "system"
-                  ? "#888"
-                  : botColorMap.get(msg.senderId) ?? "#888";
-
+                const senderColor = botColorMap.get(msg.senderId) ?? "#888";
                 const isThink = msg.type === "think";
                 const isBeliefChange = msg.type === "belief_change";
                 const isSystem = msg.type === "system";
-                const isPrivate = !!msg.targetId;
-                const targetColor = msg.targetId ? (botNameColorMap.get(msg.targetId) ?? "#aaa") : null;
+                const isUser = msg.senderId === "user";
 
                 return (
                   <motion.div
@@ -97,38 +117,31 @@ export function CultureSidebar({ bots, messages }: CultureSidebarProps) {
                     transition={{ duration: 0.2 }}
                     className={`rounded-lg border px-3 py-2 ${
                       isBeliefChange
-                        ? "border-yellow-500/30 bg-yellow-500/5"
+                        ? "border-white/15 bg-white/[0.04]"
                         : isSystem
-                        ? "border-white/10 bg-white/5"
+                        ? "border-white/8 bg-white/[0.03]"
                         : isThink
                         ? "border-white/5 bg-white/[0.02]"
-                        : isPrivate
-                        ? "border-white/8 bg-white/[0.02]"
-                        : "border-white/10"
+                        : isUser
+                        ? "border-white/15 bg-white/[0.06]"
+                        : "border-white/8 bg-white/[0.02]"
                     }`}
                   >
                     <div className="flex items-start gap-2">
                       <div
                         className="w-2 h-2 rounded-full shrink-0 mt-1"
-                        style={{ backgroundColor: senderColor }}
+                        style={{ backgroundColor: isUser ? "#fff" : isSystem ? "#666" : senderColor }}
                       />
                       <div className="min-w-0 flex-1">
-                        <div className="text-[10px] font-mono font-bold mb-0.5 flex items-center gap-1 flex-wrap">
-                          <span style={{ color: senderColor }}>{msg.senderName}</span>
-                          {isPrivate && targetColor && (
-                            <>
-                              <span className="text-white/20">→</span>
-                              <span style={{ color: targetColor }}>{msg.targetId}</span>
-                              <span className="text-[8px] text-white/15 ml-1">DM</span>
-                            </>
-                          )}
-                          {!isPrivate && !isThink && !isSystem && !isBeliefChange && (
-                            <span className="text-[8px] text-white/15 ml-1">nearby</span>
-                          )}
+                        <div className="text-[10px] font-mono font-bold mb-0.5 flex items-center gap-1">
+                          <span className={isUser ? "text-white/90" : isSystem ? "text-white/40" : "text-white/60"}>
+                            {msg.senderName}
+                          </span>
                           {isThink && <span className="text-white/20 ml-1">(thinking)</span>}
+                          {isBeliefChange && <span className="text-white/30 ml-1">changed belief</span>}
                         </div>
                         <p className={`text-[11px] font-mono leading-relaxed break-words whitespace-pre-wrap ${
-                          isThink ? "text-white/30 italic" : "text-white/70"
+                          isThink ? "text-white/25 italic" : isBeliefChange ? "text-white/50" : "text-white/70"
                         }`}>
                           {msg.content.length > 300 ? msg.content.slice(0, 300) + "..." : msg.content}
                         </p>
@@ -145,44 +158,35 @@ export function CultureSidebar({ bots, messages }: CultureSidebarProps) {
         {tab === "beliefs" && (
           <div className="px-3 py-2 space-y-3">
             {bots.map((bot) => {
-              // Build full belief history: original → changes → current
               const changeMessages = messages.filter(
                 (m) => m.type === "belief_change" && m.senderId === bot._id
               );
-              // Extract belief strings from change messages (pattern: 'now believes: "X"')
               const pastBeliefs: string[] = [bot.originalBelief];
               for (const cm of changeMessages) {
                 const match = cm.content.match(/now believes: "([^"]+)"/);
                 if (match) pastBeliefs.push(match[1]);
               }
-              // Deduplicate consecutive same beliefs
               const history = pastBeliefs.filter((b, i) => i === 0 || b !== pastBeliefs[i - 1]);
-              // Current belief is always the last
               const allOld = history.slice(0, -1);
-              const hasChanges = allOld.length > 0 || bot.belief !== bot.originalBelief;
 
               return (
                 <div
                   key={bot._id}
-                  className={`rounded-lg border px-3 py-2.5 ${
-                    hasChanges ? "border-yellow-500/20 bg-yellow-500/5" : "border-white/10"
-                  }`}
+                  className="rounded-lg border border-white/8 px-3 py-2.5"
                 >
                   <div className="flex items-center gap-2 mb-1.5">
                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: bot.color }} />
-                    <span className="text-[11px] font-mono font-bold" style={{ color: bot.color }}>
+                    <span className="text-[11px] font-mono font-bold text-white/70">
                       {bot.name}
                     </span>
                     <span className="text-[9px] font-mono text-white/20 ml-auto">{bot.state}</span>
                   </div>
-                  {/* Past beliefs — each with strikethrough */}
                   {allOld.map((b, i) => (
-                    <p key={i} className="text-[10px] font-mono text-white/25 line-through border-b border-white/[0.04] pb-1 mb-1">
+                    <p key={i} className="text-[10px] font-mono text-white/20 line-through border-b border-white/[0.04] pb-1 mb-1">
                       &quot;{b}&quot;
                     </p>
                   ))}
-                  {/* Current belief */}
-                  <p className="text-[12px] font-mono text-white/80">
+                  <p className="text-[12px] font-mono text-white/70">
                     &quot;{bot.belief}&quot;
                   </p>
                 </div>
@@ -191,6 +195,48 @@ export function CultureSidebar({ bots, messages }: CultureSidebarProps) {
           </div>
         )}
       </div>
+
+      {/* Chat input + recording — bottom of sidebar */}
+      {tab === "chat" && enabled && cultureId && (
+        <div className="shrink-0 border-t border-white/[0.06] px-3 py-2.5">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSendMessage();
+            }}
+            className="flex gap-2"
+          >
+            <input
+              type="text"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              placeholder="Type a message..."
+              className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/[0.04] text-[12px] font-mono text-white placeholder:text-white/25 focus:outline-none focus:border-white/25 transition-colors"
+            />
+            <button
+              type="button"
+              onMouseDown={startRecording}
+              onMouseUp={stopRecording}
+              onMouseLeave={stopRecording}
+              className={`px-3 py-2 rounded-lg border text-[14px] transition-colors cursor-pointer ${
+                isRecording
+                  ? "border-red-500/40 bg-red-500/20 text-red-400"
+                  : "border-white/10 bg-white/[0.04] text-white/40 hover:text-white/60 hover:bg-white/[0.08]"
+              }`}
+              title="Hold to record"
+            >
+              {isRecording ? "●" : "🎤"}
+            </button>
+            <button
+              type="submit"
+              disabled={!chatInput.trim()}
+              className="px-3 py-2 rounded-lg border border-white/10 bg-white/[0.04] text-[12px] font-mono text-white/50 hover:text-white/80 hover:bg-white/[0.08] transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+            >
+              Send
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

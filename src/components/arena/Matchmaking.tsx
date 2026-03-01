@@ -21,6 +21,8 @@ interface MatchmakingProps {
   opponentFound?: boolean;
   selectedCity?: string;
   onFlyComplete?: () => void;
+  playerCount?: number;
+  maxPlayers?: number;
 }
 
 function easeInOut(t: number): number {
@@ -119,8 +121,10 @@ export function Matchmaking({
   opponentFound = false,
   selectedCity = "New York",
   onFlyComplete,
+  playerCount = 1,
+  maxPlayers = 5,
 }: MatchmakingProps) {
-  const [countdown, setCountdown] = useState(2);
+  const [countdown, setCountdown] = useState(5);
   const droneRef = useRef<{ stop: () => void } | null>(null);
 
   useEffect(() => {
@@ -184,9 +188,12 @@ export function Matchmaking({
           </motion.div>
         ) : (
           <div className="text-center">
-            <p className="text-lg text-white/60 mb-2 font-mono">Finding opponent...</p>
+            <p className="text-lg text-white/60 mb-2 font-mono">Finding players...</p>
+            <p className="text-white/40 text-sm font-mono mb-1">
+              {playerCount}/{maxPlayers} joined
+            </p>
             <p className="text-white/25 text-xs font-mono">
-              {countdown > 0 ? `${countdown}s` : "Starting with AI..."}
+              {countdown > 0 ? `${countdown}s` : "Starting..."}
             </p>
           </div>
         )}

@@ -9,10 +9,78 @@ export const createCulture = mutation({
       status: "loading",
       cityName: "",
       topic: topic ?? "random",
+      playerCount: 1,
+      maxPlayers: 5,
+      predictionCount: 0,
       createdAt: Date.now(),
     });
 
     // Schedule scene generation
+    await ctx.scheduler.runAfter(0, internal.actions.generateCultureScene.generate, {
+      cultureId,
+    });
+
+    return cultureId;
+  },
+});
+
+export const joinOrCreateRoom = mutation({
+  args: { topic: v.optional(v.string()) },
+  handler: async (ctx, { topic }) => {
+    const t = topic ?? "random";
+    const now = Date.now();
+
+    // Look for a recent room that's still accepting players (created within last 10s, not yet running)
+    const recentCultures = await ctx.db
+      .query("cultures")
+      .withIndex("by_status", (q) => q.eq("status", "loading"))
+      .collect();
+
+    const joinable = recentCultures.find(
+      (c) =>
+        c.topic === t &&
+        now - c.createdAt < 10000 &&
+        (c.playerCount ?? 1) < (c.maxPlayers ?? 5)
+    );
+
+    if (joinable) {
+      await ctx.db.patch(joinable._id, {
+        playerCount: (joinable.playerCount ?? 1) + 1,
+      });
+      return joinable._id;
+    }
+
+    // Also check pick_belief rooms (scene loaded but game not started yet)
+    const pickCultures = await ctx.db
+      .query("cultures")
+      .withIndex("by_status", (q) => q.eq("status", "pick_belief"))
+      .collect();
+
+    const joinablePick = pickCultures.find(
+      (c) =>
+        c.topic === t &&
+        now - c.createdAt < 15000 &&
+        (c.playerCount ?? 1) < (c.maxPlayers ?? 5)
+    );
+
+    if (joinablePick) {
+      await ctx.db.patch(joinablePick._id, {
+        playerCount: (joinablePick.playerCount ?? 1) + 1,
+      });
+      return joinablePick._id;
+    }
+
+    // No joinable room found — create new
+    const cultureId = await ctx.db.insert("cultures", {
+      status: "loading",
+      cityName: "",
+      topic: t,
+      playerCount: 1,
+      maxPlayers: 5,
+      predictionCount: 0,
+      createdAt: now,
+    });
+
     await ctx.scheduler.runAfter(0, internal.actions.generateCultureScene.generate, {
       cultureId,
     });
@@ -92,8 +160,11 @@ export const submitPrediction = mutation({
 
     const now = Date.now();
 
+    const newPredCount = (culture.predictionCount ?? 0) + 1;
+
     await ctx.db.patch(cultureId, {
       userPrediction: prediction,
+      predictionCount: newPredCount,
       status: "running",
       gameStartedAt: now,
       gameDuration: 90000, // 1.5 minutes
@@ -104,15 +175,40 @@ export const submitPrediction = mutation({
       cultureId,
     });
 
-    // Add system message
+    // Add system message (don't reveal the prediction to bots)
     await ctx.db.insert("cultureMessages", {
       cultureId,
       senderId: "system",
       senderName: "System",
-      content: `User predicts: "${prediction}" will dominate`,
+      content: `A prediction has been locked in. The debate begins!`,
       type: "system",
       posX: 0,
       posZ: 0,
+      createdAt: Date.now(),
+    });
+  },
+});
+
+// Public mutation for user chat messages
+export const addUserMessage = mutation({
+  args: {
+    cultureId: v.id("cultures"),
+    content: v.string(),
+    posX: v.number(),
+    posZ: v.number(),
+  },
+  handler: async (ctx, { cultureId, content, posX, posZ }) => {
+    const culture = await ctx.db.get(cultureId);
+    if (!culture || culture.status !== "running") return;
+
+    await ctx.db.insert("cultureMessages", {
+      cultureId,
+      senderId: "user",
+      senderName: "You",
+      content,
+      type: "speech",
+      posX,
+      posZ,
       createdAt: Date.now(),
     });
   },
@@ -308,18 +404,25 @@ export const endGame = internalMutation({
 
     const resultSummary = `Dominant belief: '${dominantBelief}' held by ${dominantCount}/${total} bots`;
 
+    const userCorrect = userPrediction === dominantBelief;
+
     await ctx.db.patch(cultureId, {
       status: "ended",
       finalScore,
       resultSummary,
+      dominantBelief,
+      dominantCount,
     });
 
     // Add system message
+    const verdict = userCorrect
+      ? `You predicted correctly! Score: ${finalScore}`
+      : `Your prediction didn't win. The dominant belief was: "${dominantBelief}"`;
     await ctx.db.insert("cultureMessages", {
       cultureId,
       senderId: "system",
       senderName: "System",
-      content: `Game over! ${resultSummary}. Your prediction score: ${finalScore}`,
+      content: `Game over! ${verdict}`,
       type: "system",
       posX: 0,
       posZ: 0,

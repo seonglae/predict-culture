@@ -24,7 +24,7 @@ function ArenaContent() {
   const [userPos] = useState({ x: 0, z: 0 });
   const [predictionText, setPredictionText] = useState("");
 
-  const createCulture = useMutation(api.cultures.createCulture);
+  const joinOrCreateRoom = useMutation(api.cultures.joinOrCreateRoom);
   const submitPrediction = useMutation(api.cultures.submitPrediction);
 
   const culture = useQuery(api.cultures.getCulture, cultureId ? { cultureId } : "skip");
@@ -82,7 +82,7 @@ function ArenaContent() {
     async (name: string, topic: string) => {
       try {
         warmUpAudio();
-        const id = await createCulture({ topic });
+        const id = await joinOrCreateRoom({ topic });
         setCultureId(id);
         setPhase("matchmaking");
       } catch (err) {
@@ -90,7 +90,7 @@ function ArenaContent() {
         toast.error("Failed to start. Please try again.");
       }
     },
-    [createCulture]
+    [joinOrCreateRoom]
   );
 
   const handleFlyComplete = useCallback(() => {
@@ -239,6 +239,8 @@ function ArenaContent() {
               opponentFound={sceneReady}
               selectedCity={cityName ?? "Paris"}
               onFlyComplete={handleFlyComplete}
+              playerCount={(culture as any)?.playerCount ?? 1}
+              maxPlayers={(culture as any)?.maxPlayers ?? 5}
             />
           )}
 
@@ -279,8 +281,11 @@ function ArenaContent() {
                     {culture?.topic ?? "random"}
                   </span>
                 </motion.div>
-                <p className="text-[13px] font-mono text-white/40 mb-6 text-center">
+                <p className="text-[13px] font-mono text-white/40 mb-2 text-center">
                   What will happen? Type your prediction or pick a belief below.
+                </p>
+                <p className="text-[11px] font-mono text-white/25 mb-6 text-center">
+                  {culture?.predictionCount ?? 0}/{culture?.maxPlayers ?? 5} predictions submitted
                 </p>
 
                 {/* Prediction text input */}
@@ -317,20 +322,26 @@ function ArenaContent() {
                 <p className="text-[11px] font-mono text-white/25 mb-3 uppercase tracking-wider">or pick a belief</p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl w-full mb-4">
-                  {beliefs?.map((belief, i) => (
-                    <motion.button
-                      key={i}
-                      initial={{ y: 20, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      transition={{ delay: 0.15 + 0.1 * i }}
-                      onClick={() => handlePrediction(belief)}
-                      className="px-5 py-4 rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-xl text-left hover:bg-white/[0.08] hover:border-white/20 transition-all group cursor-pointer"
-                    >
-                      <p className="text-[14px] font-mono text-white/70 group-hover:text-white/90">
-                        &quot;{belief}&quot;
-                      </p>
-                    </motion.button>
-                  ))}
+                  {beliefs?.map((belief, i) => {
+                    const matchingBot = bots.find((b) => b.belief === belief);
+                    return (
+                      <motion.button
+                        key={i}
+                        initial={{ y: 20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: 0.15 + 0.1 * i }}
+                        onClick={() => handlePrediction(belief)}
+                        className="px-5 py-4 rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-xl text-left hover:bg-white/[0.08] hover:border-white/20 transition-all group cursor-pointer"
+                      >
+                        <p className="text-[10px] font-mono text-white/30 mb-1">
+                          {matchingBot?.name ?? `Bot ${i + 1}`}
+                        </p>
+                        <p className="text-[14px] font-mono text-white/70 group-hover:text-white/90">
+                          &quot;{belief}&quot;
+                        </p>
+                      </motion.button>
+                    );
+                  })}
                 </div>
 
                 {/* Bot badges with colors */}
@@ -394,6 +405,8 @@ function ArenaContent() {
                 <CultureSidebar
                   bots={bots}
                   messages={messages}
+                  cultureId={cultureId ?? undefined}
+                  enabled={phase === "running"}
                 />
               </div>
             </motion.div>
@@ -537,6 +550,8 @@ function ArenaContent() {
                 <CultureSidebar
                   bots={bots}
                   messages={messages}
+                  cultureId={cultureId ?? undefined}
+                  enabled={false}
                 />
               </div>
             </motion.div>
