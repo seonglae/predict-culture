@@ -117,11 +117,13 @@ function ArenaContent() {
       try {
         warmUpAudio();
         setPlayerName(name);
-        // Fetch country flag from geo API
+        // Read country from middleware cookie
         let countryFlag: string | undefined;
         try {
-          const geo = await fetch("/api/geo").then((r) => r.json());
-          countryFlag = geo.flag || undefined;
+          const cc = document.cookie.match(/(?:^|;\s*)_geo_country=([^;]*)/)?.[1] || "";
+          if (cc && cc.length === 2) {
+            countryFlag = String.fromCodePoint(...[...cc.toUpperCase()].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
+          }
         } catch {}
         await getOrCreatePlayer({ name, countryFlag });
         const id = await joinOrCreateRoom({ topic, playerName: name });
