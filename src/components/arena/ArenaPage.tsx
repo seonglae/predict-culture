@@ -22,6 +22,7 @@ function ArenaContent() {
   const [phase, setPhase] = useState<Phase>("name_entry");
   const [cultureId, setCultureId] = useState<Id<"cultures"> | null>(null);
   const [userPos] = useState({ x: 0, z: 0 });
+  const [predictionText, setPredictionText] = useState("");
 
   const createCulture = useMutation(api.cultures.createCulture);
   const submitPrediction = useMutation(api.cultures.submitPrediction);
@@ -272,45 +273,69 @@ function ArenaContent() {
                     className="text-2xl md:text-4xl font-bold text-center text-white"
                     style={{ fontFamily: "var(--font-display), sans-serif" }}
                   >
-                    Which Belief Will Win?
+                    Submit Your Prediction
                   </h2>
                   <span className="px-3 py-1 rounded-full bg-white/10 border border-white/20 text-[11px] font-mono text-white/50">
                     {culture?.topic ?? "random"}
                   </span>
                 </motion.div>
                 <p className="text-[13px] font-mono text-white/40 mb-6 text-center">
-                  Predict which belief will dominate. Click to submit your prediction.
+                  What will happen? Type your prediction or pick a belief below.
                 </p>
 
-                {/* Bot beliefs overview */}
-                <div className="mb-6 text-[11px] font-mono text-white/30 text-center max-w-lg">
-                  <p className="mb-2 text-white/50">Each bot starts with a belief. Which one will spread?</p>
-                  <div className="flex flex-wrap gap-2 justify-center">
-                    {bots.map((bot) => (
-                      <span key={bot._id} className="px-2 py-1 rounded-full border border-white/10" style={{ borderColor: bot.color + "40", color: bot.color }}>
-                        {bot.name}: &quot;{bot.belief}&quot;
-                      </span>
-                    ))}
+                {/* Prediction text input */}
+                <motion.form
+                  initial={{ y: 10, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.1 }}
+                  className="w-full max-w-xl mb-6"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (predictionText.trim()) handlePrediction(predictionText.trim());
+                  }}
+                >
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={predictionText}
+                      onChange={(e) => setPredictionText(e.target.value)}
+                      placeholder="e.g. &quot;All bots will believe pineapple is sacred&quot;"
+                      className="flex-1 px-4 py-3 rounded-xl border border-white/20 bg-black/50 backdrop-blur-sm text-[14px] font-mono text-white placeholder:text-white/25 focus:outline-none focus:border-white/40 transition-colors"
+                      autoFocus
+                    />
+                    <button
+                      type="submit"
+                      disabled={!predictionText.trim()}
+                      className="px-5 py-3 rounded-xl bg-white/15 border border-white/20 text-[13px] font-mono font-bold text-white hover:bg-white/25 transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      Submit
+                    </button>
                   </div>
-                </div>
+                </motion.form>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl w-full">
+                {/* Quick pick — bot beliefs */}
+                <p className="text-[11px] font-mono text-white/25 mb-3 uppercase tracking-wider">or quick pick a belief</p>
+                <div className="flex flex-wrap gap-2 justify-center max-w-xl">
                   {beliefs?.map((belief, i) => (
                     <motion.button
                       key={i}
-                      initial={{ y: 20, opacity: 0 }}
+                      initial={{ y: 10, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
-                      transition={{ delay: 0.1 * i }}
+                      transition={{ delay: 0.15 + 0.05 * i }}
                       onClick={() => handlePrediction(belief)}
-                      className="px-5 py-4 rounded-xl border border-white/15 bg-black/40 backdrop-blur-sm text-left hover:bg-white/10 hover:border-white/30 transition-all group cursor-pointer"
+                      className="px-4 py-2 rounded-lg border border-white/10 bg-black/30 text-[12px] font-mono text-white/60 hover:bg-white/10 hover:border-white/25 hover:text-white/90 transition-all cursor-pointer"
                     >
-                      <p className="text-[11px] font-mono text-white/40 mb-1 group-hover:text-white/60">
-                        I predict this will win
-                      </p>
-                      <p className="text-[14px] font-mono text-white/80 group-hover:text-white">
-                        &quot;{belief}&quot;
-                      </p>
+                      &quot;{belief}&quot;
                     </motion.button>
+                  ))}
+                </div>
+
+                {/* Bot overview */}
+                <div className="mt-6 flex flex-wrap gap-2 justify-center max-w-lg">
+                  {bots.map((bot) => (
+                    <span key={bot._id} className="px-2 py-1 rounded-full border border-white/10 text-[10px] font-mono" style={{ borderColor: bot.color + "30", color: bot.color + "99" }}>
+                      {bot.name}: &quot;{bot.belief}&quot;
+                    </span>
                   ))}
                 </div>
               </div>
