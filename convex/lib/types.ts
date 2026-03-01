@@ -68,6 +68,15 @@ export interface RoadSegment {
   type: "primary" | "secondary" | "residential";
 }
 
+export interface BuildingFootprint {
+  /** Polygon vertices in world coordinates (closed loop) */
+  polygon: { x: number; z: number }[];
+  /** Height in world units */
+  height: number;
+  /** Building color */
+  color: string;
+}
+
 export interface SceneConfig {
   gridSize: number;
   tileSize: number;
@@ -77,6 +86,7 @@ export interface SceneConfig {
   cityName?: string;
   cityLabel?: string;
   roads?: RoadSegment[];
+  buildings?: BuildingFootprint[];
   lat?: number;
   lon?: number;
 }
