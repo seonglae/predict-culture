@@ -6,12 +6,50 @@ interface UseVoiceInputOptions {
   onTranscript: (text: string) => void;
 }
 
+// Extend Window for webkitSpeechRecognition
+interface SpeechRecognitionEvent extends Event {
+  results: { [index: number]: { [index: number]: { transcript: string } } };
+}
+
 export function useVoiceInput({ onTranscript }: UseVoiceInputOptions) {
   const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const usedBrowserSTT = useRef(false);
 
   const startRecording = useCallback(async () => {
+    usedBrowserSTT.current = false;
+
+    // Try browser SpeechRecognition first (instant, free, no API)
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      try {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = "en-US";
+
+        recognition.onresult = (event: SpeechRecognitionEvent) => {
+          const text = event.results[0]?.[0]?.transcript;
+          if (text?.trim()) {
+            usedBrowserSTT.current = true;
+            onTranscript(text.trim());
+          }
+        };
+        recognition.onerror = () => {};
+        recognition.onend = () => setIsRecording(false);
+
+        recognitionRef.current = recognition;
+        recognition.start();
+        setIsRecording(true);
+        return;
+      } catch {
+        // Fall through to MediaRecorder + server STT
+      }
+    }
+
+    // Fallback: MediaRecorder → server-side Voxtral STT
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream, {
@@ -27,10 +65,11 @@ export function useVoiceInput({ onTranscript }: UseVoiceInputOptions) {
 
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        if (blob.size < 1000) return; // too short
+        if (usedBrowserSTT.current) return;
 
-        // Convert to base64 and send to STT API
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        if (blob.size < 1000) return;
+
         const arrayBuffer = await blob.arrayBuffer();
         const base64 = btoa(
           new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
@@ -60,6 +99,12 @@ export function useVoiceInput({ onTranscript }: UseVoiceInputOptions) {
   }, [onTranscript]);
 
   const stopRecording = useCallback(() => {
+    // Stop browser SpeechRecognition
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch {}
+      recognitionRef.current = null;
+    }
+    // Stop MediaRecorder
     if (mediaRecorderRef.current?.state === "recording") {
       mediaRecorderRef.current.stop();
     }
