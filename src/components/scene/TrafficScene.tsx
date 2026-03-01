@@ -60,6 +60,10 @@ interface BuildingFootprint {
   color: string;
 }
 
+interface WaterPolygon {
+  polygon: { x: number; z: number }[];
+}
+
 interface TrafficSceneProps {
   tiles: Tile[];
   gridSize: number;
@@ -72,6 +76,7 @@ interface TrafficSceneProps {
   interactive?: boolean;
   roads?: RoadSegment[];
   buildings?: BuildingFootprint[];
+  waterPolygons?: WaterPolygon[];
 }
 
 // Gradient sky dome — soft urban sky
@@ -123,6 +128,7 @@ export function TrafficScene({
   interactive = true,
   roads,
   buildings,
+  waterPolygons,
 }: TrafficSceneProps) {
   const mapSize = (gridSize * tileSize) / 2;
 
@@ -130,7 +136,7 @@ export function TrafficScene({
     <div className="w-full h-full rounded-2xl overflow-hidden border border-white/[0.06]">
       <Canvas
         shadows
-        camera={{ position: [0, mapSize * 2, mapSize * 1.2], fov: 50 }}
+        camera={{ position: [0, mapSize * 1.2, mapSize * 1.4], fov: 50 }}
         gl={{ antialias: true, alpha: false }}
         style={{ background: "#dce8f0" }}
       >
@@ -159,14 +165,14 @@ export function TrafficScene({
             color="#b8d4e8"
           />
 
-          {/* Fog for depth */}
-          <fog attach="fog" args={["#dce8f0", mapSize * 2.5, mapSize * 6]} />
+          {/* Fog — very far, subtle depth only */}
+          <fog attach="fog" args={["#dce8f0", mapSize * 5, mapSize * 12]} />
 
           {/* Scene */}
           <Ground size={mapSize} onGroundClick={interactive ? onGroundClick : undefined} />
-          <Roads tiles={tiles} gridSize={gridSize} tileSize={tileSize} roads={roads} />
+          <Roads tiles={tiles} gridSize={gridSize} tileSize={tileSize} roads={roads} waterPolygons={waterPolygons} />
           <Buildings tiles={tiles} gridSize={gridSize} tileSize={tileSize} osmBuildings={buildings} />
-          <Vehicles initialVehicles={vehicles} currentFrame={currentFrame} roads={roads} />
+          <Vehicles initialVehicles={vehicles} currentFrame={currentFrame} />
 
           {/* Prediction markers */}
           {predictions.map((p, i) => (
