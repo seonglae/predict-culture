@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { TrafficScene } from "@/components/scene/TrafficScene";
-import { BattleTimer } from "./BattleTimer";
 import { GlobeMini } from "./GlobeMini";
 import { useSimulation } from "@/hooks/useSimulation";
+import { playCrash, playBattleBGM, warmUpAudio } from "@/lib/sfx";
 
 interface Tile {
   row: number;
@@ -57,6 +57,7 @@ interface BattleSceneProps {
   cityLabel?: string;
   roads?: RoadSegment[];
   buildings?: BuildingFootprint[];
+  waterPolygons?: { polygon: { x: number; z: number }[] }[];
   flash?: (duration?: number) => void;
   shake?: (intensity?: number, duration?: number) => void;
   lat?: number;
@@ -80,6 +81,7 @@ export function BattleScene({
   cityLabel,
   roads,
   buildings,
+  waterPolygons,
   flash,
   shake,
   lat,
@@ -87,6 +89,13 @@ export function BattleScene({
 }: BattleSceneProps) {
   const [hasPredicted, setHasPredicted] = useState(false);
   const [accidentOccurred, setAccidentOccurred] = useState(false);
+
+  // Start battle BGM on mount — dark ambient drone loop
+  useEffect(() => {
+    warmUpAudio();
+    const bgm = playBattleBGM();
+    return () => bgm.stop();
+  }, []);
 
   const {
     currentFrame,
@@ -102,6 +111,7 @@ export function BattleScene({
         setAccidentOccurred(true);
         // Defer side effects to avoid setState during render
         queueMicrotask(() => {
+          playCrash();
           flash?.(150);
           shake?.(15, 500);
         });
@@ -114,22 +124,27 @@ export function BattleScene({
 
   const handleGroundClick = useCallback(
     (point: { x: number; z: number }) => {
-      if (hasPredicted || accidentOccurred) return;
+      if (accidentOccurred) return;
       setHasPredicted(true);
       onPrediction(point, currentTime);
     },
-    [hasPredicted, accidentOccurred, onPrediction, currentTime]
+    [accidentOccurred, onPrediction, currentTime]
   );
 
   return (
     <div className="relative w-full h-full">
-      <GlobeMini cityName={cityName} cityLabel={cityLabel} lat={lat} lon={lon} roads={roads} />
+      <GlobeMini cityName={cityName} cityLabel={cityLabel} lat={lat} lon={lon} roads={roads} tiles={tiles} gridSize={gridSize} tileSize={tileSize} />
 
-      <BattleTimer
-        currentTime={currentTime}
-        hasPredicted={hasPredicted}
-        accidentOccurred={accidentOccurred}
-      />
+      {/* Minimal prediction status */}
+      {!accidentOccurred && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+          <div className="px-4 py-2 rounded-xl bg-black/40 backdrop-blur-sm border border-white/10">
+            <p className="text-[12px] text-white/70 font-mono tracking-wide">
+              {hasPredicted ? "click again to move prediction" : "click to predict crash location"}
+            </p>
+          </div>
+        </div>
+      )}
 
       <TrafficScene
         tiles={tiles}
@@ -140,9 +155,10 @@ export function BattleScene({
         predictions={predictions}
         accidentPoint={showAccident || accidentOccurred ? accidentPoint : null}
         onGroundClick={handleGroundClick}
-        interactive={!hasPredicted && !accidentOccurred}
+        interactive={!accidentOccurred}
         roads={roads}
         buildings={buildings}
+        waterPolygons={waterPolygons}
       />
     </div>
   );

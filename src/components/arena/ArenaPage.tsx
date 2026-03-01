@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { AnimatePresence, motion } from "framer-motion";
+import { toast } from "sonner";
 import { Header } from "@/components/ui/Header";
 import { WaveField } from "@/components/ui/WaveField";
 import { ScreenEffectsProvider, useScreenEffects } from "@/components/arena/ScreenEffects";
@@ -46,6 +47,10 @@ function ArenaContent() {
     api.predictions.getPredictions,
     battleId ? { battleId } : "skip"
   );
+  const ratingChanges = useQuery(
+    api.battles.getBattleRatingChanges,
+    battleId ? { battleId } : "skip"
+  );
   const existingPlayer = useQuery(
     api.players.getByBrowserId,
     fingerprint ? { browserId: fingerprint } : "skip"
@@ -77,16 +82,63 @@ function ArenaContent() {
       setPlayerName(name);
       setDifficulty(diff);
 
-      const pid = await registerOrGet({ name, browserId: fingerprint });
-      setPlayerId(pid);
+      try {
+        const pid = await registerOrGet({ name, browserId: fingerprint });
+        setPlayerId(pid);
 
-      const bid = await createBattle({ playerId: pid, difficulty: diff });
-      setBattleId(bid);
+        const bid = await createBattle({ playerId: pid, difficulty: diff });
+        setBattleId(bid);
 
-      setPhase("matchmaking");
+        setPhase("matchmaking");
+      } catch (err) {
+        console.error("Failed to start battle:", err);
+        toast.error("Failed to start battle. Please try again.");
+        setPhase("name_entry");
+      }
     },
     [fingerprint, registerOrGet, createBattle]
   );
+
+  // Detect cancelled/failed battles — auto-retry
+  const retryCountRef = useRef(0);
+  useEffect(() => {
+    if (!battle) return;
+    if (battle.status === "cancelled" && (phase === "matchmaking" || phase === "simulation")) {
+      if (retryCountRef.current >= 2) {
+        toast.error("Failed after multiple retries. Going home.");
+        retryCountRef.current = 0;
+        setBattleId(null);
+        cityRef.current = null;
+        setPhase("name_entry");
+        return;
+      }
+      retryCountRef.current++;
+      toast.error("Map generation failed. Retrying...");
+      // Auto-retry: create a new battle
+      if (playerId) {
+        setBattleId(null);
+        cityRef.current = null;
+        createBattle({ playerId, difficulty }).then((bid) => {
+          setBattleId(bid);
+        }).catch(() => {
+          toast.error("Retry failed. Going home.");
+          setPhase("name_entry");
+        });
+      }
+    }
+  }, [battle, phase, playerId, difficulty, createBattle]);
+
+  // Matchmaking timeout — if stuck for 30s, reset to name entry
+  useEffect(() => {
+    if (phase !== "matchmaking") return;
+    const timeout = setTimeout(() => {
+      toast.error("Connection timed out. Please try again.");
+      setBattleId(null);
+      cityRef.current = null;
+      setPhase("name_entry");
+    }, 30000);
+    return () => clearTimeout(timeout);
+  }, [phase]);
 
   const handlePrediction = useCallback(
     async (point: { x: number; z: number }, time: number) => {
@@ -105,7 +157,15 @@ function ArenaContent() {
   const handleSimulationComplete = useCallback(async () => {
     if (!battleId) return;
     setTimeout(async () => {
-      await completeBattle({ battleId });
+      try {
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), 5000)
+        );
+        await Promise.race([completeBattle({ battleId }), timeout]);
+      } catch (err) {
+        console.error("Failed to complete battle:", err);
+        toast.error("Failed to save results.");
+      }
       setPhase("results");
     }, 1000);
   }, [battleId, completeBattle]);
@@ -120,30 +180,39 @@ function ArenaContent() {
   const buildResults = () => {
     if (!battle || !predictions || battle.status !== "completed") return [];
 
-    return battle.playerIds.map((pid: Id<"players">, i: number) => {
+    const results = battle.playerIds.map((pid: Id<"players">, i: number) => {
       const pred = predictions.find((p: any) => p.playerId === pid);
+      const ratingChange = ratingChanges?.find((r: any) => r.playerId === pid);
       return {
         name: pid === playerId ? playerName : `Player ${i + 1}`,
         score: pred?.score ?? 0,
         distanceScore: pred?.distanceScore ?? 0,
         timingScore: pred?.timingScore ?? 0,
-        eloChange: 0,
-        elo: 1500,
+        eloChange: ratingChange ? Math.round(ratingChange.eloAfter - ratingChange.eloBefore) : 0,
+        elo: ratingChange ? Math.round(ratingChange.eloAfter) : 1500,
         isAI: false,
         isYou: pid === playerId,
-        placement: i,
+        placement: ratingChange?.placement ?? i,
       };
     });
+
+    results.sort((a, b) => b.score - a.score);
+    return results;
   };
 
   const buildPredictionMarkers = () => {
     if (!predictions) return [];
-    return predictions.map((p: any, i: number) => ({
-      x: p.coordinates.x,
-      z: p.coordinates.z,
-      color: PREDICTION_COLORS[i % PREDICTION_COLORS.length],
-      label: p.playerId === playerId ? "You" : `P${i + 1}`,
-    }));
+    // Before crash: only show the user's own prediction
+    // After crash (results): show all predictions
+    const showAll = battle?.status === "completed";
+    return predictions
+      .filter((p: any) => showAll || p.playerId === playerId)
+      .map((p: any, i: number) => ({
+        x: p.coordinates.x,
+        z: p.coordinates.z,
+        color: PREDICTION_COLORS[i % PREDICTION_COLORS.length],
+        label: p.playerId === playerId ? "You" : `P${i + 1}`,
+      }));
   };
 
   const handleFlyComplete = useCallback(() => {
@@ -316,6 +385,7 @@ function ArenaContent() {
                 cityLabel={cityLabel}
                 roads={sceneConfig.roads}
                 buildings={sceneConfig.buildings}
+                waterPolygons={sceneConfig.waterPolygons}
                 flash={flash}
                 shake={shake}
                 lat={sceneConfig.lat}
