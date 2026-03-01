@@ -69,20 +69,48 @@ function buildRoadGraph(roads: RoadSegment[]) {
   return { junctions, roadLengths };
 }
 
-function lerpAngle(a: number, b: number, t: number): number {
-  let diff = b - a;
-  while (diff > Math.PI) diff -= Math.PI * 2;
-  while (diff < -Math.PI) diff += Math.PI * 2;
-  return a + diff * t;
+function computeVertexNormals(pts: { x: number; z: number }[]) {
+  const normals: { x: number; z: number }[] = [];
+  for (let i = 0; i < pts.length; i++) {
+    let nx = 0, nz = 0, count = 0;
+    if (i > 0) {
+      const dx = pts[i].x - pts[i - 1].x;
+      const dz = pts[i].z - pts[i - 1].z;
+      const len = Math.sqrt(dx * dx + dz * dz);
+      if (len > 0.001) { nx += -dz / len; nz += dx / len; count++; }
+    }
+    if (i < pts.length - 1) {
+      const dx = pts[i + 1].x - pts[i].x;
+      const dz = pts[i + 1].z - pts[i].z;
+      const len = Math.sqrt(dx * dx + dz * dz);
+      if (len > 0.001) { nx += -dz / len; nz += dx / len; count++; }
+    }
+    if (count > 0) { nx /= count; nz /= count; }
+    const nlen = Math.sqrt(nx * nx + nz * nz);
+    normals.push(nlen > 0.001 ? { x: nx / nlen, z: nz / nlen } : { x: 0, z: 0 });
+  }
+  return normals;
 }
 
-function interpolateRoad(road: RoadSegment, dist: number, forward: boolean) {
+const normalCache = new Map<RoadSegment, { fwd: { x: number; z: number }[]; rev: { x: number; z: number }[] }>();
+
+function getRoadNormals(road: RoadSegment) {
+  let cached = normalCache.get(road);
+  if (cached) return cached;
+  const fwd = computeVertexNormals(road.points);
+  const rev = computeVertexNormals([...road.points].reverse());
+  cached = { fwd, rev };
+  normalCache.set(road, cached);
+  return cached;
+}
+
+function interpolateRoad(road: RoadSegment, dist: number, forward: boolean, laneOffset: number = 0) {
   const pts = road.points;
   if (pts.length < 2) return { x: pts[0].x, z: pts[0].z, heading: 0 };
 
   const ordered = forward ? pts : [...pts].reverse();
+  const normals = forward ? getRoadNormals(road).fwd : getRoadNormals(road).rev;
   let remaining = dist;
-  const BLEND = 1.5;
 
   for (let i = 0; i < ordered.length - 1; i++) {
     const dx = ordered[i + 1].x - ordered[i].x;
@@ -91,33 +119,24 @@ function interpolateRoad(road: RoadSegment, dist: number, forward: boolean) {
     if (segLen < 0.001) continue;
     if (remaining <= segLen) {
       const t = remaining / segLen;
-      const x = ordered[i].x + dx * t;
-      const z = ordered[i].z + dz * t;
+      const cx = ordered[i].x + dx * t;
+      const cz = ordered[i].z + dz * t;
       const heading = Math.atan2(dx, -dz);
-
-      let smooth = heading;
-      if (remaining < BLEND && i > 0) {
-        const pdx = ordered[i].x - ordered[i - 1].x;
-        const pdz = ordered[i].z - ordered[i - 1].z;
-        if (pdx * pdx + pdz * pdz > 0.001) {
-          smooth = lerpAngle(Math.atan2(pdx, -pdz), heading, remaining / BLEND);
-        }
-      } else if (segLen - remaining < BLEND && i < ordered.length - 2) {
-        const ndx = ordered[i + 2].x - ordered[i + 1].x;
-        const ndz = ordered[i + 2].z - ordered[i + 1].z;
-        if (ndx * ndx + ndz * ndz > 0.001) {
-          smooth = lerpAngle(heading, Math.atan2(ndx, -ndz), 1 - (segLen - remaining) / BLEND);
-        }
-      }
-
-      return { x, z, heading: smooth };
+      const nx = normals[i].x * (1 - t) + normals[i + 1].x * t;
+      const nz = normals[i].z * (1 - t) + normals[i + 1].z * t;
+      return { x: cx + nx * laneOffset, z: cz + nz * laneOffset, heading };
     }
     remaining -= segLen;
   }
 
   const last = ordered[ordered.length - 1];
   const prev = ordered[ordered.length - 2];
-  return { x: last.x, z: last.z, heading: Math.atan2(last.x - prev.x, -(last.z - prev.z)) };
+  const lastN = normals[normals.length - 1];
+  return {
+    x: last.x + lastN.x * laneOffset,
+    z: last.z + lastN.z * laneOffset,
+    heading: Math.atan2(last.x - prev.x, -(last.z - prev.z)),
+  };
 }
 
 interface VehicleSim {
@@ -204,7 +223,7 @@ export function runSimulation(
       id: v.id, roadIdx: bestRoad, forward,
       dist: Math.max(2, Math.min(roadLen - 2, rng() * roadLen)),
       speed: v.speed, maxSpeed: v.speed,
-      laneOffset: (forward ? 1 : -1) * laneCenterOffset,
+      laneOffset: laneCenterOffset,
       width: sz.w, length: sz.l, aggressiveness: v.aggressiveness,
       state: "driving", x: 0, z: 0, heading: 0,
       flying: false, altitude: 0,
@@ -294,7 +313,7 @@ export function runSimulation(
           id: `v${nextVehicleId++}`, roadIdx: ri, forward, dist,
           speed: (vType === "motorcycle" ? 0.8 + rng() * 0.7 : 0.5 + rng() * 0.7) * 0.5,
           maxSpeed: vType === "motorcycle" ? 0.8 + rng() * 0.7 : 0.5 + rng() * 0.7,
-          laneOffset: (forward ? 1 : -1) * spawnLaneCenter,
+          laneOffset: spawnLaneCenter,
           width: vSz.w, length: vSz.l, aggressiveness: 0.15 + rng() * 0.45,
           state: "driving", x: 0, z: 0, heading: 0, flying: false, altitude: 0,
         };
@@ -391,15 +410,14 @@ export function runSimulation(
           const newNumLanes = Math.max(1, Math.round(newHalfW / 1.5));
           const newLaneWidth = newHalfW / newNumLanes;
           const currentLane = Math.min(
-            Math.floor(Math.abs(v.laneOffset) / newLaneWidth),
+            Math.floor(v.laneOffset / newLaneWidth),
             newNumLanes - 1
           );
-          v.laneOffset = (v.forward ? 1 : -1) * (currentLane + 0.5) * newLaneWidth;
+          v.laneOffset = (currentLane + 0.5) * newLaneWidth;
         } else {
           v.forward = !v.forward;
           v.dist = Math.max(0, roadLen - overshoot);
           v.speed *= 0.3;
-          v.laneOffset = -v.laneOffset;
         }
       }
 
@@ -407,7 +425,6 @@ export function runSimulation(
         v.forward = !v.forward;
         v.dist = Math.abs(v.dist);
         v.speed *= 0.3;
-        v.laneOffset = -v.laneOffset;
       }
 
       updateVehiclePosition(v, roads);
@@ -516,14 +533,12 @@ function obbOverlap(a: VehicleSim, b: VehicleSim): boolean {
 function updateVehiclePosition(v: VehicleSim, roads: RoadSegment[]) {
   const road = roads[v.roadIdx];
   if (!road) return;
-  const pos = interpolateRoad(road, v.dist, v.forward);
-  v.heading = pos.heading;
-  const perpX = Math.cos(v.heading);
-  const perpZ = Math.sin(v.heading);
   const maxOff = road.width * 0.42;
-  const clamped = Math.max(-maxOff, Math.min(maxOff, v.laneOffset));
-  v.x = pos.x + perpX * clamped;
-  v.z = pos.z + perpZ * clamped;
+  const clamped = Math.max(0, Math.min(maxOff, v.laneOffset));
+  const pos = interpolateRoad(road, v.dist, v.forward, clamped);
+  v.heading = pos.heading;
+  v.x = pos.x;
+  v.z = pos.z;
 }
 
 function angleDiff(from: number, to: number): number {
