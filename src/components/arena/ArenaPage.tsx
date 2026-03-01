@@ -13,6 +13,7 @@ import { NameEntryModal } from "@/components/arena/NameEntryModal";
 import { Matchmaking } from "@/components/arena/Matchmaking";
 import { BattleScene } from "@/components/arena/BattleScene";
 import { BattleResult } from "@/components/arena/BattleResult";
+import { TrafficScene } from "@/components/scene/TrafficScene";
 import { useBrowserFingerprint } from "@/hooks/useBrowserFingerprint";
 import { useTheme } from "@/components/ThemeProvider";
 
@@ -228,12 +229,31 @@ function ArenaContent() {
   const simulationData = battle?.simulationData as any[];
   const cityLabel = battle?.cityLabel as string | undefined;
 
-  const showWaveField = phase === "name_entry" || phase === "results";
+  const showWaveField = phase === "name_entry";
+  const showFrozenScene = phase === "results" && sceneConfig;
   const showHeader = phase !== "simulation" && phase !== "matchmaking";
 
   return (
     <div className="min-h-screen flex flex-col">
       {showWaveField && <WaveField />}
+      {showFrozenScene && (
+        <div className="fixed inset-0 z-0 opacity-40">
+          <TrafficScene
+            tiles={sceneConfig.tiles}
+            gridSize={sceneConfig.gridSize}
+            tileSize={sceneConfig.tileSize}
+            vehicles={sceneConfig.vehicles}
+            currentFrame={simulationData?.[simulationData.length - 1]}
+            predictions={buildPredictionMarkers()}
+            accidentPoint={battle?.accidentPoint ?? null}
+            onGroundClick={() => {}}
+            interactive={false}
+            roads={sceneConfig.roads}
+            buildings={sceneConfig.buildings}
+            waterPolygons={sceneConfig.waterPolygons}
+          />
+        </div>
+      )}
       {showHeader && <Header />}
 
       <main className={`flex-1 relative z-10 ${showHeader ? "pt-16" : ""}`}>
