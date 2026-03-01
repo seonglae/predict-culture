@@ -27,84 +27,21 @@ interface VehicleSpawn {
   altitude?: number;
 }
 
-interface RoadSegment {
-  points: { x: number; z: number }[];
-  width: number;
-  type: "primary" | "secondary" | "residential";
-}
-
 interface VehiclesProps {
   initialVehicles: VehicleSpawn[];
   currentFrame?: VehicleFrame[];
-  roads?: RoadSegment[];
 }
 
 const VEHICLE_DIMS: Record<string, { w: number; h: number; l: number }> = {
-  car: { w: 0.75, h: 0.45, l: 1.5 },
-  truck: { w: 0.9, h: 0.6, l: 2.2 },
-  bus: { w: 1.1, h: 0.7, l: 3.0 },
-  motorcycle: { w: 0.35, h: 0.4, l: 1.0 },
+  car: { w: 0.55, h: 0.4, l: 1.2 },
+  truck: { w: 0.65, h: 0.5, l: 1.8 },
+  bus: { w: 0.7, h: 0.6, l: 2.4 },
+  motorcycle: { w: 0.25, h: 0.35, l: 0.8 },
   drone: { w: 0.5, h: 0.12, l: 0.5 },
   helicopter: { w: 0.9, h: 0.5, l: 1.8 },
 };
 
-/**
- * Project point onto nearest road polyline segment.
- * Returns snapped position, simulation-space heading, and road width.
- *
- * Simulation heading convention:
- *   direction = (sin h, -cos h)
- *   h=0 → north (-Z), h=PI/2 → east (+X)
- */
-function snapToRoad(
-  px: number,
-  pz: number,
-  roads: RoadSegment[],
-  maxDist: number = 3.0
-): { x: number; z: number; heading: number; roadWidth: number } | null {
-  let bestDist = maxDist * maxDist;
-  let bestX = px;
-  let bestZ = pz;
-  let bestHeading = 0;
-  let bestWidth = 0.6;
-
-  for (const road of roads) {
-    const pts = road.points;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const ax = pts[i].x;
-      const az = pts[i].z;
-      const bx = pts[i + 1].x;
-      const bz = pts[i + 1].z;
-
-      const dx = bx - ax;
-      const dz = bz - az;
-      const lenSq = dx * dx + dz * dz;
-      if (lenSq < 0.0001) continue;
-
-      let t = ((px - ax) * dx + (pz - az) * dz) / lenSq;
-      t = Math.max(0, Math.min(1, t));
-
-      const cx = ax + t * dx;
-      const cz = az + t * dz;
-      const distSq = (px - cx) * (px - cx) + (pz - cz) * (pz - cz);
-
-      if (distSq < bestDist) {
-        bestDist = distSq;
-        bestX = cx;
-        bestZ = cz;
-        // Simulation-space heading: direction (sin h, -cos h) matches (dx, dz)/len
-        // So sin h = dx/len, -cos h = dz/len → h = atan2(dx, -dz)
-        bestHeading = Math.atan2(dx, -dz);
-        bestWidth = road.width;
-      }
-    }
-  }
-
-  if (bestDist >= maxDist * maxDist) return null;
-  return { x: bestX, z: bestZ, heading: bestHeading, roadWidth: bestWidth };
-}
-
-export function Vehicles({ initialVehicles, currentFrame, roads }: VehiclesProps) {
+export function Vehicles({ initialVehicles, currentFrame }: VehiclesProps) {
   return (
     <group>
       {initialVehicles.map((v) => {
@@ -116,29 +53,10 @@ export function Vehicles({ initialVehicles, currentFrame, roads }: VehiclesProps
         const dims = VEHICLE_DIMS[v.type] ?? VEHICLE_DIMS.car;
         const altitude = frame?.altitude ?? v.altitude ?? 0;
 
-        // Snap ground vehicles to nearest road polyline
-        if (roads && roads.length > 0 && !v.flying && !isCrashed) {
-          const snapped = snapToRoad(x, z, roads);
-          if (snapped) {
-            x = snapped.x;
-            z = snapped.z;
-
-            // Determine forward vs reverse on road using dot product
-            // Both in simulation space: direction = (sin h, -cos h)
-            const simDirX = Math.sin(simHeading);
-            const simDirZ = -Math.cos(simHeading);
-            const roadDirX = Math.sin(snapped.heading);
-            const roadDirZ = -Math.cos(snapped.heading);
-            const dot = simDirX * roadDirX + simDirZ * roadDirZ;
-            simHeading = dot >= 0 ? snapped.heading : snapped.heading + Math.PI;
-
-            // Lane offset: right-hand traffic
-            // Right perpendicular for sim heading h: (cos h, sin h)
-            const laneWidth = snapped.roadWidth * 0.22;
-            x += Math.cos(simHeading) * laneWidth;
-            z += Math.sin(simHeading) * laneWidth;
-          }
-        }
+        // Use simulation positions directly — no display-side snapping
+        // The simulation handles lane discipline and road-following
+        // Display-side snapping caused vehicles to overlap visually
+        // without triggering simulation collision detection
 
         // Convert simulation heading to display rotation
         // Sim: direction = (sin h, -cos h), h=0 → north (-Z)
@@ -180,12 +98,21 @@ function Vehicle({
   useFrame(() => {
     if (!groupRef.current) return;
     const g = groupRef.current;
-    g.position.x += (targetPos.current.x - g.position.x) * 0.15;
-    g.position.z += (targetPos.current.z - g.position.z) * 0.15;
-    let angleDiff = targetRot.current - g.rotation.y;
-    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-    g.rotation.y += angleDiff * 0.15;
+    // Snap instantly for large jumps (boundary respawn), lerp for normal movement
+    const dx = targetPos.current.x - g.position.x;
+    const dz = targetPos.current.z - g.position.z;
+    if (dx * dx + dz * dz > 100) {
+      g.position.x = targetPos.current.x;
+      g.position.z = targetPos.current.z;
+      g.rotation.y = targetRot.current;
+    } else {
+      g.position.x += dx * 0.3;
+      g.position.z += dz * 0.3;
+      let angleDiff = targetRot.current - g.rotation.y;
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+      g.rotation.y += angleDiff * 0.25;
+    }
   });
 
   const isBus = type === "bus";
@@ -309,12 +236,20 @@ function Motorcycle({
   useFrame(() => {
     if (!groupRef.current) return;
     const g = groupRef.current;
-    g.position.x += (targetPos.current.x - g.position.x) * 0.18;
-    g.position.z += (targetPos.current.z - g.position.z) * 0.18;
-    let angleDiff = targetRot.current - g.rotation.y;
-    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-    g.rotation.y += angleDiff * 0.18;
+    const dx = targetPos.current.x - g.position.x;
+    const dz = targetPos.current.z - g.position.z;
+    if (dx * dx + dz * dz > 100) {
+      g.position.x = targetPos.current.x;
+      g.position.z = targetPos.current.z;
+      g.rotation.y = targetRot.current;
+    } else {
+      g.position.x += dx * 0.3;
+      g.position.z += dz * 0.3;
+      let angleDiff = targetRot.current - g.rotation.y;
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+      g.rotation.y += angleDiff * 0.25;
+    }
   });
 
   return (

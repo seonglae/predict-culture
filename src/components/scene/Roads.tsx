@@ -17,11 +17,16 @@ interface RoadSegment {
   type: "primary" | "secondary" | "residential";
 }
 
+interface WaterPolygon {
+  polygon: { x: number; z: number }[];
+}
+
 interface RoadsProps {
   tiles: Tile[];
   gridSize: number;
   tileSize: number;
   roads?: RoadSegment[];
+  waterPolygons?: WaterPolygon[];
 }
 
 function isRoad(type: string): boolean {
@@ -30,6 +35,66 @@ function isRoad(type: string): boolean {
 
 function isWater(type: string): boolean {
   return type === "water" || type === "river";
+}
+
+/**
+ * Trim a polyline by removing `trimDist` from each end.
+ * Returns a shorter polyline, or null if too short.
+ */
+function trimPolyline(
+  points: { x: number; z: number }[],
+  trimDist: number
+): { x: number; z: number }[] | null {
+  if (points.length < 2) return null;
+
+  // Compute cumulative distances
+  const cumDist: number[] = [0];
+  for (let i = 1; i < points.length; i++) {
+    const dx = points[i].x - points[i - 1].x;
+    const dz = points[i].z - points[i - 1].z;
+    cumDist.push(cumDist[i - 1] + Math.sqrt(dx * dx + dz * dz));
+  }
+  const totalLen = cumDist[cumDist.length - 1];
+  if (totalLen < trimDist * 2 + 0.3) return null;
+
+  const startDist = trimDist;
+  const endDist = totalLen - trimDist;
+  const result: { x: number; z: number }[] = [];
+
+  // Interpolate start point
+  for (let i = 0; i < points.length - 1; i++) {
+    if (cumDist[i + 1] >= startDist) {
+      const segLen = cumDist[i + 1] - cumDist[i];
+      const t = segLen > 0.001 ? (startDist - cumDist[i]) / segLen : 0;
+      result.push({
+        x: points[i].x + (points[i + 1].x - points[i].x) * t,
+        z: points[i].z + (points[i + 1].z - points[i].z) * t,
+      });
+      break;
+    }
+  }
+
+  // Middle points
+  for (let i = 1; i < points.length - 1; i++) {
+    if (cumDist[i] > startDist && cumDist[i] < endDist) {
+      result.push(points[i]);
+    }
+  }
+
+  // Interpolate end point
+  for (let i = points.length - 1; i > 0; i--) {
+    if (cumDist[i - 1] <= endDist) {
+      const segLen = cumDist[i] - cumDist[i - 1];
+      const t = segLen > 0.001 ? (endDist - cumDist[i - 1]) / segLen : 1;
+      result.push({
+        x: points[i - 1].x + (points[i].x - points[i - 1].x) * t,
+        z: points[i - 1].z + (points[i].z - points[i - 1].z) * t,
+      });
+      break;
+    }
+  }
+
+  return result.length >= 2 ? result : null;
 }
 
 /**
@@ -96,11 +161,11 @@ function buildCenterLineGeometry(
 ): THREE.BufferGeometry {
   const vertices: number[] = [];
   const indices: number[] = [];
-
-  let dist = 0;
-  let drawing = true;
-  let segStart = 0;
   let vertCount = 0;
+
+  // Walk the polyline at fixed intervals, drawing dashes
+  const cycle = dashLen + gapLen;
+  let cumDist = 0;
 
   for (let i = 0; i < points.length - 1; i++) {
     const p0 = points[i];
@@ -112,18 +177,19 @@ function buildCenterLineGeometry(
 
     const ux = dx / segLen;
     const uz = dz / segLen;
-    // Perpendicular
     const nx = -uz;
     const nz = ux;
     const hw = lineWidth / 2;
 
     let t = 0;
-    while (t < segLen) {
-      const toggleDist = drawing ? dashLen : gapLen;
-      const remaining = toggleDist - (dist % (dashLen + gapLen) < toggleDist ? dist % (dashLen + gapLen) : 0);
-      const step = Math.min(segLen - t, remaining > 0 ? remaining : toggleDist);
+    while (t < segLen - 0.001) {
+      const posInCycle = cumDist % cycle;
+      const drawing = posInCycle < dashLen;
 
       if (drawing) {
+        const dashRemaining = dashLen - posInCycle;
+        const step = Math.max(0.01, Math.min(segLen - t, dashRemaining));
+
         const sx = p0.x + ux * t;
         const sz = p0.z + uz * t;
         const ex = p0.x + ux * (t + step);
@@ -137,14 +203,18 @@ function buildCenterLineGeometry(
         indices.push(bi, bi + 2, bi + 1);
         indices.push(bi + 1, bi + 2, bi + 3);
         vertCount += 4;
+
+        cumDist += step;
+        t += step;
+      } else {
+        const gapRemaining = cycle - posInCycle;
+        const step = Math.max(0.01, Math.min(segLen - t, gapRemaining));
+        cumDist += step;
+        t += step;
       }
 
-      t += step;
-      dist += step;
-      if (dist >= (drawing ? dashLen : gapLen)) {
-        dist = 0;
-        drawing = !drawing;
-      }
+      // Safety: prevent runaway loops
+      if (vertCount > 50000) break;
     }
   }
 
@@ -156,51 +226,87 @@ function buildCenterLineGeometry(
 }
 
 function PolylineRoads({ roads }: { roads: RoadSegment[] }) {
-  const { roadGeometries, lineGeometries } = useMemo(() => {
-    const rGeos: { geo: THREE.BufferGeometry; type: RoadSegment["type"] }[] = [];
-    const lGeos: THREE.BufferGeometry[] = [];
+  const geometries = useMemo(() => {
+    const roadSurfaces: THREE.BufferGeometry[] = [];
+    const yellowLines: THREE.BufferGeometry[] = [];
 
     for (const road of roads) {
       if (road.points.length < 2) continue;
-      rGeos.push({
-        geo: buildRoadRibbonGeometry(road.points, road.width),
-        type: road.type,
-      });
-      // Center dashes for all roads
-      lGeos.push(
-        buildCenterLineGeometry(road.points, 0.4, 0.3, 0.06)
-      );
+
+      // Road surface — full length
+      roadSurfaces.push(buildRoadRibbonGeometry(road.points, road.width));
+
+      // Yellow dashed center line — trimmed at intersections
+      const trimDist = Math.max(road.width * 0.4, 0.8);
+      const trimmed = trimPolyline(road.points, trimDist);
+      if (trimmed) {
+        yellowLines.push(buildCenterLineGeometry(trimmed, 1.2, 0.8, 0.12));
+      }
     }
 
-    return { roadGeometries: rGeos, lineGeometries: lGeos };
+    return { roadSurfaces, yellowLines };
   }, [roads]);
 
   return (
     <group>
-      {roadGeometries.map((r, i) => (
-        <mesh key={`road-${i}`} geometry={r.geo} receiveShadow>
+      {/* Road surface */}
+      {geometries.roadSurfaces.map((geo, i) => (
+        <mesh key={`road-${i}`} geometry={geo} receiveShadow>
           <meshStandardMaterial color="#3a3a3e" roughness={0.85} metalness={0.02} />
         </mesh>
       ))}
-      {lineGeometries.map((geo, i) => (
-        <mesh key={`line-${i}`} geometry={geo}>
-          <meshBasicMaterial color="#ffffff" transparent opacity={0.7} />
+      {/* Yellow dashed center line */}
+      {geometries.yellowLines.map((geo, i) => (
+        <mesh key={`yellow-${i}`} geometry={geo}>
+          <meshBasicMaterial color="#e8b500" />
         </mesh>
       ))}
     </group>
   );
 }
 
-export function Roads({ tiles, gridSize, tileSize, roads }: RoadsProps) {
+export function Roads({ tiles, gridSize, tileSize, roads, waterPolygons }: RoadsProps) {
   const roadTiles = useMemo(() => tiles.filter((t) => isRoad(t.type)), [tiles]);
   const waterTiles = useMemo(() => tiles.filter((t) => isWater(t.type)), [tiles]);
 
   const hasPolylineRoads = roads && roads.length > 0;
+  const hasWaterPolygons = waterPolygons && waterPolygons.length > 0;
+
+  // Build water polygon geometries
+  const waterGeos = useMemo(() => {
+    if (!waterPolygons || waterPolygons.length === 0) return [];
+    return waterPolygons.map((wp) => {
+      const shape = new THREE.Shape();
+      shape.moveTo(wp.polygon[0].x, wp.polygon[0].z);
+      for (let i = 1; i < wp.polygon.length; i++) {
+        shape.lineTo(wp.polygon[i].x, wp.polygon[i].z);
+      }
+      shape.closePath();
+      const geo = new THREE.ShapeGeometry(shape);
+      // Rotate from XY to XZ plane
+      geo.rotateX(-Math.PI / 2);
+      geo.translate(0, 0.02, 0);
+      return geo;
+    });
+  }, [waterPolygons]);
 
   return (
     <group>
-      {/* Water tiles */}
-      {waterTiles.map((tile, i) => {
+      {/* Water polygons (from OSM) */}
+      {hasWaterPolygons && waterGeos.map((geo, i) => (
+        <mesh key={`waterpoly-${i}`} geometry={geo} receiveShadow>
+          <meshStandardMaterial
+            color="#4a7c8f"
+            roughness={0.15}
+            metalness={0.1}
+            transparent
+            opacity={0.9}
+          />
+        </mesh>
+      ))}
+
+      {/* Fallback: Water tiles */}
+      {!hasWaterPolygons && waterTiles.map((tile, i) => {
         const x = (tile.col - gridSize / 2) * tileSize + tileSize / 2;
         const z = (tile.row - gridSize / 2) * tileSize + tileSize / 2;
         return (
