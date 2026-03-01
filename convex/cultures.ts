@@ -12,7 +12,7 @@ export const createCulture = mutation({
       topic: topic ?? "random",
       playerName: playerName ?? "Anonymous",
       playerCount: 1,
-      maxPlayers: 5,
+      maxPlayers: 10,
       predictionCount: 0,
       createdAt: Date.now(),
     });
@@ -79,7 +79,7 @@ export const joinOrCreateRoom = mutation({
       topic: t,
       playerName: playerName ?? "Anonymous",
       playerCount: 1,
-      maxPlayers: 5,
+      maxPlayers: 10,
       predictionCount: 0,
       createdAt: now,
     });
