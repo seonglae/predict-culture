@@ -104,6 +104,17 @@ export function useSpatialAudio(
     playingRef.current = false;
   }, [speakTTS]);
 
+  // Stop all audio when disabled (game ended)
+  useEffect(() => {
+    if (!enabled) {
+      queueRef.current = [];
+      playingRef.current = false;
+      if (typeof speechSynthesis !== "undefined") {
+        speechSynthesis.cancel();
+      }
+    }
+  }, [enabled]);
+
   // Watch for new speech messages
   useEffect(() => {
     if (!enabled) return;
