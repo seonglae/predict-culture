@@ -6,9 +6,9 @@ import {
   type SimulationResult,
   type TileType,
   type Tile,
+  type RoadSegment,
 } from "./types";
 
-// Seeded PRNG
 function mulberry32(seed: number) {
   return function () {
     seed |= 0;
@@ -19,238 +19,243 @@ function mulberry32(seed: number) {
   };
 }
 
+interface RoadEdge {
+  roadIdx: number;
+  forward: boolean;
+  length: number;
+  otherJunction: number;
+}
+
+interface Junction {
+  x: number;
+  z: number;
+  edges: RoadEdge[];
+}
+
+function buildRoadGraph(roads: RoadSegment[]) {
+  const SNAP = 1.5;
+  const junctions: Junction[] = [];
+  const roadLengths: number[] = [];
+
+  for (const road of roads) {
+    let len = 0;
+    for (let i = 1; i < road.points.length; i++) {
+      const dx = road.points[i].x - road.points[i - 1].x;
+      const dz = road.points[i].z - road.points[i - 1].z;
+      len += Math.sqrt(dx * dx + dz * dz);
+    }
+    roadLengths.push(len);
+  }
+
+  function getJunction(x: number, z: number): number {
+    for (let i = 0; i < junctions.length; i++) {
+      const dx = junctions[i].x - x;
+      const dz = junctions[i].z - z;
+      if (dx * dx + dz * dz < SNAP * SNAP) return i;
+    }
+    junctions.push({ x, z, edges: [] });
+    return junctions.length - 1;
+  }
+
+  for (let ri = 0; ri < roads.length; ri++) {
+    const pts = roads[ri].points;
+    if (pts.length < 2 || roadLengths[ri] < 0.5) continue;
+    const jStart = getJunction(pts[0].x, pts[0].z);
+    const jEnd = getJunction(pts[pts.length - 1].x, pts[pts.length - 1].z);
+    junctions[jStart].edges.push({ roadIdx: ri, forward: true, length: roadLengths[ri], otherJunction: jEnd });
+    junctions[jEnd].edges.push({ roadIdx: ri, forward: false, length: roadLengths[ri], otherJunction: jStart });
+  }
+
+  return { junctions, roadLengths };
+}
+
+function lerpAngle(a: number, b: number, t: number): number {
+  let diff = b - a;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  return a + diff * t;
+}
+
+function interpolateRoad(road: RoadSegment, dist: number, forward: boolean) {
+  const pts = road.points;
+  if (pts.length < 2) return { x: pts[0].x, z: pts[0].z, heading: 0 };
+
+  const ordered = forward ? pts : [...pts].reverse();
+  let remaining = dist;
+  const BLEND = 1.5;
+
+  for (let i = 0; i < ordered.length - 1; i++) {
+    const dx = ordered[i + 1].x - ordered[i].x;
+    const dz = ordered[i + 1].z - ordered[i].z;
+    const segLen = Math.sqrt(dx * dx + dz * dz);
+    if (segLen < 0.001) continue;
+    if (remaining <= segLen) {
+      const t = remaining / segLen;
+      const x = ordered[i].x + dx * t;
+      const z = ordered[i].z + dz * t;
+      const heading = Math.atan2(dx, -dz);
+
+      let smooth = heading;
+      if (remaining < BLEND && i > 0) {
+        const pdx = ordered[i].x - ordered[i - 1].x;
+        const pdz = ordered[i].z - ordered[i - 1].z;
+        if (pdx * pdx + pdz * pdz > 0.001) {
+          smooth = lerpAngle(Math.atan2(pdx, -pdz), heading, remaining / BLEND);
+        }
+      } else if (segLen - remaining < BLEND && i < ordered.length - 2) {
+        const ndx = ordered[i + 2].x - ordered[i + 1].x;
+        const ndz = ordered[i + 2].z - ordered[i + 1].z;
+        if (ndx * ndx + ndz * ndz > 0.001) {
+          smooth = lerpAngle(heading, Math.atan2(ndx, -ndz), 1 - (segLen - remaining) / BLEND);
+        }
+      }
+
+      return { x, z, heading: smooth };
+    }
+    remaining -= segLen;
+  }
+
+  const last = ordered[ordered.length - 1];
+  const prev = ordered[ordered.length - 2];
+  return { x: last.x, z: last.z, heading: Math.atan2(last.x - prev.x, -(last.z - prev.z)) };
+}
+
 interface VehicleSim {
   id: string;
+  roadIdx: number;
+  forward: boolean;
+  dist: number;
+  speed: number;
+  maxSpeed: number;
+  laneOffset: number;
+  width: number;
+  length: number;
+  aggressiveness: number;
+  state: "driving" | "crashed";
   x: number;
   z: number;
   heading: number;
-  speed: number;
-  targetSpeed: number;
-  aggressiveness: number;
-  state: "driving" | "turning" | "braking" | "crashed";
-  width: number;
-  length: number;
-  turnTimer: number;
-  lastTurnRow: number;
-  lastTurnCol: number;
   flying: boolean;
   altitude: number;
-  laneOffset: number; // lateral offset within road (-1 to 1 range)
 }
 
-function isRoad(type: TileType): boolean {
-  return type.startsWith("road_");
-}
-
-function isBlocker(type: TileType): boolean {
-  return (
-    type.startsWith("building_") ||
-    type === "water" ||
-    type === "river" ||
-    type === "forest"
-  );
-}
-
-// Build a fast lookup grid for tiles
-function buildTileGrid(tiles: Tile[], gridSize: number): (Tile | null)[][] {
-  const grid: (Tile | null)[][] = Array.from({ length: gridSize }, () =>
-    Array.from({ length: gridSize }, () => null)
-  );
-  for (const t of tiles) {
-    if (t.row >= 0 && t.row < gridSize && t.col >= 0 && t.col < gridSize) {
-      grid[t.row][t.col] = t;
-    }
-  }
-  return grid;
-}
-
-function getTileFromGrid(
-  grid: (Tile | null)[][],
-  row: number,
-  col: number,
-  gridSize: number
-): Tile | null {
-  if (row < 0 || row >= gridSize || col < 0 || col >= gridSize) return null;
-  return grid[row][col];
-}
-
-function worldToGrid(
-  x: number,
-  z: number,
-  gridSize: number,
-  tileSize: number
-): { row: number; col: number } {
-  const col = Math.floor(x / tileSize + gridSize / 2);
-  const row = Math.floor(z / tileSize + gridSize / 2);
-  return { row, col };
-}
-
-function gridToWorld(
-  row: number,
-  col: number,
-  gridSize: number,
-  tileSize: number
-): { x: number; z: number } {
-  const x = (col - gridSize / 2) * tileSize + tileSize / 2;
-  const z = (row - gridSize / 2) * tileSize + tileSize / 2;
-  return { x, z };
-}
-
-// Get the center of the road tile in world coords
-function tileCenterWorld(
-  tile: Tile,
-  gridSize: number,
-  tileSize: number
-): { x: number; z: number } {
-  return gridToWorld(tile.row, tile.col, gridSize, tileSize);
-}
-
-// Check which directions a road tile connects
-function getRoadConnections(
-  type: TileType
-): { north: boolean; south: boolean; east: boolean; west: boolean } {
-  const connections: Record<
-    string,
-    { north: boolean; south: boolean; east: boolean; west: boolean }
-  > = {
-    road_straight_ns: { north: true, south: true, east: false, west: false },
-    road_straight_ew: { north: false, south: false, east: true, west: true },
-    road_intersection: { north: true, south: true, east: true, west: true },
-    road_t_north: { north: true, south: false, east: true, west: true },
-    road_t_south: { north: false, south: true, east: true, west: true },
-    road_t_east: { north: true, south: true, east: true, west: false },
-    road_t_west: { north: true, south: true, east: false, west: true },
-    road_curve_ne: { north: true, south: false, east: true, west: false },
-    road_curve_nw: { north: true, south: false, east: false, west: true },
-    road_curve_se: { north: false, south: true, east: true, west: false },
-    road_curve_sw: { north: false, south: true, east: false, west: true },
-  };
-  return (
-    connections[type] ?? {
-      north: false,
-      south: false,
-      east: false,
-      west: false,
-    }
-  );
-}
-
-// Heading to direction
-function headingToDir(
-  heading: number
-): "north" | "south" | "east" | "west" {
-  // Normalize to 0-2PI
-  let h = ((heading % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-  if (h < Math.PI / 4 || h >= (Math.PI * 7) / 4) return "north"; // ~0
-  if (h < (Math.PI * 3) / 4) return "east"; // ~PI/2
-  if (h < (Math.PI * 5) / 4) return "south"; // ~PI
-  return "west"; // ~3PI/2
-}
-
-function dirToHeading(dir: "north" | "south" | "east" | "west"): number {
-  switch (dir) {
-    case "north":
-      return 0;
-    case "east":
-      return Math.PI / 2;
-    case "south":
-      return Math.PI;
-    case "west":
-      return -Math.PI / 2;
-  }
-}
-
-// Collision detection — AABB with orientation
-function checkCollision(a: VehicleSim, b: VehicleSim): boolean {
-  const dx = Math.abs(a.x - b.x);
-  const dz = Math.abs(a.z - b.z);
-
-  // Quick distance reject
-  const maxDim = Math.max(a.length, b.length) * 1.2;
-  if (dx > maxDim || dz > maxDim) return false;
-
-  // Oriented AABB
-  const cosA = Math.abs(Math.cos(a.heading));
-  const sinA = Math.abs(Math.sin(a.heading));
-  const cosB = Math.abs(Math.cos(b.heading));
-  const sinB = Math.abs(Math.sin(b.heading));
-
-  const aExtX = (a.length / 2) * sinA + (a.width / 2) * cosA;
-  const aExtZ = (a.length / 2) * cosA + (a.width / 2) * sinA;
-  const bExtX = (b.length / 2) * sinB + (b.width / 2) * cosB;
-  const bExtZ = (b.length / 2) * cosB + (b.width / 2) * sinB;
-
-  if (dx < aExtX + bExtX && dz < aExtZ + bExtZ) return true;
-
-  // Center distance fallback
-  const dist = Math.sqrt(dx * dx + dz * dz);
-  const minSep = (a.length + b.length) / 4;
-  return dist < minSep;
-}
-
-// Collision hitbox sizes
-const VEHICLE_SIZES: Record<string, { width: number; length: number }> = {
-  car: { width: 1.0, length: 1.8 },
-  truck: { width: 1.2, length: 2.6 },
-  bus: { width: 1.4, length: 3.4 },
-  motorcycle: { width: 0.5, length: 1.3 },
-  drone: { width: 0.6, length: 0.6 },
-  helicopter: { width: 1.2, length: 2.2 },
+const SIZES: Record<string, { w: number; l: number }> = {
+  car: { w: 0.55, l: 1.2 },
+  truck: { w: 0.65, l: 1.8 },
+  bus: { w: 0.7, l: 2.4 },
+  motorcycle: { w: 0.25, l: 0.8 },
 };
 
 export function runSimulation(
   scene: SceneConfig,
   seed: number,
-  durationSeconds: number = 15,
+  durationSeconds: number = 45,
   fps: number = 60,
-  recordEvery: number = 3
+  recordEvery: number = 6
 ): SimulationResult | null {
   const rng = mulberry32(seed + 12345);
   const dt = 1 / fps;
   const totalSteps = Math.ceil(durationSeconds * fps);
-  const { gridSize, tileSize, tiles } = scene;
-  const halfTile = tileSize / 2;
+  const roads = scene.roads;
 
-  // Build fast tile lookup
-  const tileGrid = buildTileGrid(tiles, gridSize);
+  if (!roads || roads.length === 0) {
+    return runTileGridSimulation(scene, seed, durationSeconds, fps, recordEvery);
+  }
 
-  // Initialize vehicles
-  const vehicles: VehicleSim[] = scene.vehicles.map((v) => {
-    const sizes = VEHICLE_SIZES[v.type] ?? { width: 0.8, length: 1.6 };
-    return {
-      id: v.id,
-      x: v.x,
-      z: v.z,
-      heading: v.heading,
-      speed: v.speed,
-      targetSpeed: v.speed,
-      aggressiveness: v.aggressiveness,
-      state: "driving" as const,
-      width: sizes.width,
-      length: sizes.length,
-      turnTimer: 0,
-      lastTurnRow: -1,
-      lastTurnCol: -1,
-      flying: v.flying ?? false,
-      altitude: v.altitude ?? 0,
-      laneOffset: (rng() - 0.5) * 0.6, // slight initial lane variation
-    };
-  });
+  const { junctions, roadLengths } = buildRoadGraph(roads);
+  const mapRadius = scene.mapRadius;
 
-  // Snap ground vehicles onto road centers initially
+  const vehicles: VehicleSim[] = [];
+
+  for (const v of scene.vehicles) {
+    if (v.flying) {
+      const sz = SIZES[v.type] ?? { w: 0.7, l: 1.4 };
+      vehicles.push({
+        id: v.id, roadIdx: -1, forward: true, dist: 0,
+        speed: v.speed, maxSpeed: v.speed, laneOffset: 0,
+        width: sz.w, length: sz.l, aggressiveness: v.aggressiveness,
+        state: "driving", x: v.x, z: v.z, heading: v.heading,
+        flying: true, altitude: v.altitude ?? 8,
+      });
+      continue;
+    }
+
+    let bestRoad = -1;
+    let bestDistSq = Infinity;
+    for (let ri = 0; ri < roads.length; ri++) {
+      for (const p of roads[ri].points) {
+        const d2 = (p.x - v.x) ** 2 + (p.z - v.z) ** 2;
+        if (d2 < bestDistSq) { bestDistSq = d2; bestRoad = ri; }
+      }
+    }
+    if (bestRoad < 0) continue;
+
+    const sz = SIZES[v.type] ?? { w: 0.7, l: 1.4 };
+    const forward = rng() > 0.5;
+    const roadLen = roadLengths[bestRoad];
+    const roadW = roads[bestRoad].width;
+    const halfW = roadW / 2;
+    const numLanes = Math.max(1, Math.round(halfW / 1.5));
+    const laneWidth = halfW / numLanes;
+    const laneIdx = Math.floor(rng() * numLanes);
+    const laneCenterOffset = (laneIdx + 0.5) * laneWidth;
+
+    vehicles.push({
+      id: v.id, roadIdx: bestRoad, forward,
+      dist: Math.max(2, Math.min(roadLen - 2, rng() * roadLen)),
+      speed: v.speed, maxSpeed: v.speed,
+      laneOffset: (forward ? 1 : -1) * laneCenterOffset,
+      width: sz.w, length: sz.l, aggressiveness: v.aggressiveness,
+      state: "driving", x: 0, z: 0, heading: 0,
+      flying: false, altitude: 0,
+    });
+  }
+
   for (const v of vehicles) {
-    if (v.flying) continue;
-    const { row, col } = worldToGrid(v.x, v.z, gridSize, tileSize);
-    const tile = getTileFromGrid(tileGrid, row, col, gridSize);
-    if (tile && isRoad(tile.type)) {
-      const center = tileCenterWorld(tile, gridSize, tileSize);
-      // Snap to center with small lane offset perpendicular to heading
-      const perpX = Math.cos(v.heading);
-      const perpZ = -Math.sin(v.heading);
-      v.x = center.x + perpX * v.laneOffset * 0.5;
-      v.z = center.z + perpZ * v.laneOffset * 0.5;
+    if (!v.flying) updateVehiclePosition(v, roads);
+  }
+
+  // Push apart overlapping vehicles
+  for (let iter = 0; iter < 5; iter++) {
+    for (let i = 0; i < vehicles.length; i++) {
+      if (vehicles[i].flying) continue;
+      for (let j = i + 1; j < vehicles.length; j++) {
+        if (vehicles[j].flying) continue;
+        if (vehicles[i].roadIdx === vehicles[j].roadIdx) {
+          const dDist = Math.abs(vehicles[i].dist - vehicles[j].dist);
+          if (dDist < 5) {
+            if (vehicles[i].dist < vehicles[j].dist) {
+              vehicles[i].dist -= 3; vehicles[j].dist += 3;
+            } else {
+              vehicles[i].dist += 3; vehicles[j].dist -= 3;
+            }
+            const rl = roadLengths[vehicles[i].roadIdx];
+            vehicles[i].dist = Math.max(1, Math.min(rl - 1, vehicles[i].dist));
+            vehicles[j].dist = Math.max(1, Math.min(rl - 1, vehicles[j].dist));
+          }
+          continue;
+        }
+        const d2 = (vehicles[j].x - vehicles[i].x) ** 2 + (vehicles[j].z - vehicles[i].z) ** 2;
+        if (d2 < 4) {
+          vehicles[j].dist += 5;
+          const rl = roadLengths[vehicles[j].roadIdx];
+          if (vehicles[j].dist > rl - 1) vehicles[j].dist = rl * 0.5;
+        }
+      }
+    }
+    for (const v of vehicles) {
+      if (!v.flying) updateVehiclePosition(v, roads);
     }
   }
+
+  // Gradual spawning: double by 10s
+  const initialCount = vehicles.length;
+  const targetCount = initialCount * 2;
+  const spawnInterval = fps * 2;
+  let nextSpawnStep = spawnInterval;
+  let spawnedExtra = 0;
+  const spawnBatchSize = Math.max(1, Math.ceil((targetCount - initialCount) / 5));
+  let nextVehicleId = initialCount;
 
   const frames: SimulationFrame[] = [];
   let accidentPoint: { x: number; z: number } | null = null;
@@ -260,330 +265,358 @@ export function runSimulation(
   for (let step = 0; step < totalSteps; step++) {
     const time = step * dt;
 
+    // Gradual spawn
+    if (step >= nextSpawnStep && time < 10 && spawnedExtra < targetCount - initialCount) {
+      for (let si = 0; si < spawnBatchSize && spawnedExtra < targetCount - initialCount; si++) {
+        const ri = Math.floor(rng() * roads.length);
+        const road = roads[ri];
+        if (road.points.length < 2) continue;
+        const roadLen = roadLengths[ri];
+        if (roadLen < 3) continue;
+        const dist = 2 + rng() * (roadLen - 4);
+        const forward = rng() > 0.5;
+        let tooClose = false;
+        for (const ov of vehicles) {
+          if (ov.roadIdx === ri && ov.forward === forward && Math.abs(ov.dist - dist) < 3) {
+            tooClose = true; break;
+          }
+        }
+        if (tooClose) continue;
+        const vType = rng() > 0.7 ? "truck" : rng() > 0.5 ? "motorcycle" : "car";
+        const vSz = SIZES[vType] ?? { w: 0.55, l: 1.2 };
+        const spawnRoadW = road.width;
+        const spawnHalfW = spawnRoadW / 2;
+        const spawnNumLanes = Math.max(1, Math.round(spawnHalfW / 1.5));
+        const spawnLaneWidth = spawnHalfW / spawnNumLanes;
+        const spawnLaneIdx = Math.floor(rng() * spawnNumLanes);
+        const spawnLaneCenter = (spawnLaneIdx + 0.5) * spawnLaneWidth;
+        const newV: VehicleSim = {
+          id: `v${nextVehicleId++}`, roadIdx: ri, forward, dist,
+          speed: (vType === "motorcycle" ? 0.8 + rng() * 0.7 : 0.5 + rng() * 0.7) * 0.5,
+          maxSpeed: vType === "motorcycle" ? 0.8 + rng() * 0.7 : 0.5 + rng() * 0.7,
+          laneOffset: (forward ? 1 : -1) * spawnLaneCenter,
+          width: vSz.w, length: vSz.l, aggressiveness: 0.15 + rng() * 0.45,
+          state: "driving", x: 0, z: 0, heading: 0, flying: false, altitude: 0,
+        };
+        updateVehiclePosition(newV, roads);
+        vehicles.push(newV);
+        spawnedExtra++;
+      }
+      nextSpawnStep += spawnInterval;
+    }
+
     for (const v of vehicles) {
       if (v.state === "crashed") continue;
 
-      // Flying vehicles: simple wandering
       if (v.flying) {
         v.heading += (rng() - 0.5) * 0.03;
         v.x += Math.sin(v.heading) * v.speed * dt;
         v.z -= Math.cos(v.heading) * v.speed * dt;
-        const halfMap = (gridSize * tileSize) / 2;
-        if (Math.abs(v.x) > halfMap * 0.8 || Math.abs(v.z) > halfMap * 0.8) {
+        if (Math.abs(v.x) > mapRadius * 0.8 || Math.abs(v.z) > mapRadius * 0.8) {
           v.heading += Math.PI * 0.03;
         }
         continue;
       }
 
-      // Get current tile
-      const { row, col } = worldToGrid(v.x, v.z, gridSize, tileSize);
-      const tile = getTileFromGrid(tileGrid, row, col, gridSize);
+      const roadLen = roadLengths[v.roadIdx];
+      let desiredSpeed = v.maxSpeed;
 
-      // If somehow off-road, teleport back to nearest road center
-      if (!tile || !isRoad(tile.type)) {
-        let bestDist = Infinity;
-        let bestTile: Tile | null = null;
-        for (let dr = -3; dr <= 3; dr++) {
-          for (let dc = -3; dc <= 3; dc++) {
-            const nt = getTileFromGrid(tileGrid, row + dr, col + dc, gridSize);
-            if (nt && isRoad(nt.type)) {
-              const c = tileCenterWorld(nt, gridSize, tileSize);
-              const d = (c.x - v.x) ** 2 + (c.z - v.z) ** 2;
-              if (d < bestDist) {
-                bestDist = d;
-                bestTile = nt;
-              }
-            }
-          }
-        }
-        if (bestTile) {
-          const c = tileCenterWorld(bestTile, gridSize, tileSize);
-          v.x = c.x;
-          v.z = c.z;
-          // Align heading to the road direction
-          const conn = getRoadConnections(bestTile.type);
-          if (conn.north || conn.south) v.heading = conn.north ? 0 : Math.PI;
-          else if (conn.east || conn.west) v.heading = conn.east ? Math.PI / 2 : -Math.PI / 2;
-        }
-        continue; // skip rest of this vehicle's update
-      }
-
-      // Road-center attraction — strong lateral centering perpendicular to heading
-      {
-        const center = tileCenterWorld(tile, gridSize, tileSize);
-        // Perpendicular to heading direction
-        const perpX = Math.cos(v.heading);
-        const perpZ = -Math.sin(v.heading);
-        // Distance from center projected onto perpendicular axis
-        const dx = v.x - center.x;
-        const dz = v.z - center.z;
-        const lateralDist = dx * perpX + dz * perpZ;
-        // Pull toward center lane (allow small lane offset)
-        const targetLateral = v.laneOffset * 0.3;
-        const correction = (targetLateral - lateralDist) * 0.08;
-        v.x += perpX * correction;
-        v.z += perpZ * correction;
-      }
-
-      // Straight road heading correction — keep aligned to road axis
-      if (tile.type === "road_straight_ns") {
-        // Should be heading north (0) or south (PI)
-        const targetH = Math.abs(v.heading) < Math.PI / 2 ? 0 : Math.PI;
-        let diff = targetH - v.heading;
-        while (diff > Math.PI) diff -= Math.PI * 2;
-        while (diff < -Math.PI) diff += Math.PI * 2;
-        v.heading += diff * 0.15;
-      } else if (tile.type === "road_straight_ew") {
-        // Should be heading east (PI/2) or west (-PI/2)
-        const h = ((v.heading % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-        const targetH = h < Math.PI ? Math.PI / 2 : -Math.PI / 2;
-        let diff = targetH - v.heading;
-        while (diff > Math.PI) diff -= Math.PI * 2;
-        while (diff < -Math.PI) diff += Math.PI * 2;
-        v.heading += diff * 0.15;
-      }
-
-      // Intersection / junction decision
-      if (
-        tile &&
-        (tile.type === "road_intersection" ||
-          tile.type.startsWith("road_t_") ||
-          tile.type.startsWith("road_curve_")) &&
-        (row !== v.lastTurnRow || col !== v.lastTurnCol)
-      ) {
-        const center = tileCenterWorld(tile, gridSize, tileSize);
-        const distToCenter = Math.sqrt(
-          (center.x - v.x) ** 2 + (center.z - v.z) ** 2
-        );
-
-        // Only decide when near center of intersection
-        if (distToCenter < halfTile * 0.6) {
-          v.lastTurnRow = row;
-          v.lastTurnCol = col;
-
-          const connections = getRoadConnections(tile.type);
-          const dirs: ("north" | "south" | "east" | "west")[] = [];
-          const weights: number[] = [];
-
-          const currentDir = headingToDir(v.heading);
-          const oppositeDir: Record<string, string> = {
-            north: "south",
-            south: "north",
-            east: "west",
-            west: "east",
-          };
-
-          const checkDir = (
-            dir: "north" | "south" | "east" | "west",
-            dr: number,
-            dc: number
-          ) => {
-            if (!connections[dir]) return;
-            // Don't U-turn
-            if (dir === oppositeDir[currentDir]) return;
-
-            const nextTile = getTileFromGrid(
-              tileGrid,
-              row + dr,
-              col + dc,
-              gridSize
-            );
-            if (nextTile && isRoad(nextTile.type)) {
-              dirs.push(dir);
-              // Favor going straight, aggressive vehicles take turns more often
-              const isStraight = dir === currentDir;
-              weights.push(
-                isStraight ? 2.0 - v.aggressiveness * 0.8 : 0.5 + v.aggressiveness * 0.8
-              );
-            }
-          };
-
-          checkDir("north", -1, 0);
-          checkDir("south", 1, 0);
-          checkDir("east", 0, 1);
-          checkDir("west", 0, -1);
-
-          if (dirs.length > 0) {
-            const totalWeight = weights.reduce((a, b) => a + b, 0);
-            let r = rng() * totalWeight;
-            let chosenDir = dirs[0];
-            for (let i = 0; i < dirs.length; i++) {
-              r -= weights[i];
-              if (r <= 0) {
-                chosenDir = dirs[i];
-                break;
-              }
-            }
-            v.heading = dirToHeading(chosenDir);
-            v.state = "turning";
-            v.turnTimer = 0.3;
-
-            // Snap to road center when turning to prevent clipping
-            v.x = center.x;
-            v.z = center.z;
-          }
-        }
-      }
-
-      // Curve tiles: force heading to follow the curve
-      if (tile && tile.type.startsWith("road_curve_")) {
-        const center = tileCenterWorld(tile, gridSize, tileSize);
-        const distToCenter = Math.sqrt(
-          (center.x - v.x) ** 2 + (center.z - v.z) ** 2
-        );
-        if (
-          distToCenter < halfTile * 0.8 &&
-          (row !== v.lastTurnRow || col !== v.lastTurnCol)
-        ) {
-          v.lastTurnRow = row;
-          v.lastTurnCol = col;
-          const connections = getRoadConnections(tile.type);
-          const currentDir = headingToDir(v.heading);
-          // Find the direction that isn't where we came from
-          const availableDirs = (
-            ["north", "south", "east", "west"] as const
-          ).filter(
-            (d) =>
-              connections[d] &&
-              d !==
-                ({
-                  north: "south",
-                  south: "north",
-                  east: "west",
-                  west: "east",
-                }[currentDir] as typeof d)
-          );
-          if (availableDirs.length > 0) {
-            v.heading = dirToHeading(availableDirs[0]);
-            v.x = center.x;
-            v.z = center.z;
-          }
-        }
-      }
-
-      // Update turn timer
-      if (v.turnTimer > 0) {
-        v.turnTimer -= dt;
-        if (v.turnTimer <= 0) v.state = "driving";
-      }
-
-      // Aggressive lane offset changes — causes collisions on straights
-      if (rng() < 0.005 * v.aggressiveness) {
-        v.laneOffset += (rng() - 0.5) * 0.4;
-        v.laneOffset = Math.max(-0.8, Math.min(0.8, v.laneOffset));
-      }
-
-      // Speed control — slow at intersections unless aggressive
-      const isAtJunction =
-        tile &&
-        (tile.type === "road_intersection" ||
-          tile.type.startsWith("road_t_") ||
-          tile.type.startsWith("road_curve_"));
-      const desiredSpeed = isAtJunction
-        ? v.targetSpeed * (0.5 + v.aggressiveness * 0.5)
-        : v.targetSpeed;
-      v.speed += (desiredSpeed - v.speed) * 0.08;
-
-      // Move — main direction + small lateral offset
-      const perpX = Math.cos(v.heading);
-      const perpZ = -Math.sin(v.heading);
-      const laneX = perpX * v.laneOffset * 0.02;
-      const laneZ = perpZ * v.laneOffset * 0.02;
-      const newX = v.x + Math.sin(v.heading) * v.speed * dt + laneX;
-      const newZ = v.z - Math.cos(v.heading) * v.speed * dt + laneZ;
-
-      // Check if new position is on a road tile or building
-      const { row: newRow, col: newCol } = worldToGrid(
-        newX,
-        newZ,
-        gridSize,
-        tileSize
-      );
-      const newTile = getTileFromGrid(tileGrid, newRow, newCol, gridSize);
-
-      if (newTile && isRoad(newTile.type)) {
-        // On road — allow movement
-        v.x = newX;
-        v.z = newZ;
-      } else {
-        // Would go off-road (building, park, edge, empty)
-        // Don't move — just keep position, slow down, wait for next intersection turn
-        v.speed *= 0.9;
-        // If completely stuck (speed near zero), try to find a valid direction
-        if (v.speed < 0.3) {
-          const conn = getRoadConnections(tile.type);
-          const currentDir = headingToDir(v.heading);
-          const opposite: Record<string, "north" | "south" | "east" | "west"> = {
-            north: "south", south: "north", east: "west", west: "east",
-          };
-          // Try any connected direction except where we're going (which is blocked)
-          const altDirs = (["north", "south", "east", "west"] as const).filter(
-            d => conn[d] && d !== currentDir
-          );
-          if (altDirs.length > 0) {
-            // Pick a non-U-turn if possible
-            const nonUturn = altDirs.filter(d => d !== opposite[currentDir]);
-            const chosen = nonUturn.length > 0
-              ? nonUturn[Math.floor(rng() * nonUturn.length)]
-              : altDirs[Math.floor(rng() * altDirs.length)];
-            v.heading = dirToHeading(chosen);
-            v.speed = v.targetSpeed * 0.5;
-            v.state = "turning";
-            v.turnTimer = 0.4;
-            // Snap to center for clean turn
-            const center = tileCenterWorld(tile, gridSize, tileSize);
-            v.x = center.x;
-            v.z = center.z;
-          } else {
-            // Dead end — U-turn as last resort
-            v.heading = dirToHeading(opposite[currentDir]);
-            v.speed = v.targetSpeed * 0.3;
-          }
-        }
-      }
-
-      // Proximity braking — slow down if another vehicle is ahead
       for (const other of vehicles) {
         if (other === v || other.state === "crashed" || other.flying) continue;
+
+        if (other.roadIdx === v.roadIdx && other.forward === v.forward) {
+          const gap = other.dist - v.dist;
+          if (gap > 0 && gap < 8) {
+            const safeGap = 3.0 + v.speed * 0.5;
+            if (gap < safeGap) {
+              desiredSpeed = Math.min(desiredSpeed, other.speed * 0.8);
+              if (gap < 2) desiredSpeed = Math.min(desiredSpeed, 0.2);
+            }
+          }
+          continue;
+        }
+
+        // Cross-road: only brake if headings are crossing
+        const hDot = Math.sin(v.heading) * Math.sin(other.heading) + Math.cos(v.heading) * Math.cos(other.heading);
+        if (Math.abs(hDot) > 0.7) continue;
+
         const dx = other.x - v.x;
         const dz = other.z - v.z;
-        const dist = Math.sqrt(dx * dx + dz * dz);
-        if (dist > 4) continue;
-
-        // Is the other vehicle ahead of us?
-        const aheadX = Math.sin(v.heading);
-        const aheadZ = -Math.cos(v.heading);
-        const dot = dx * aheadX + dz * aheadZ;
-        if (dot > 0 && dot < 3.5) {
-          // Vehicle ahead — brake based on distance
-          const brakeFactor = 1 - dot / 4;
-          v.speed = Math.min(v.speed, v.targetSpeed * brakeFactor);
-
-          // Aggressive drivers might swerve instead
-          if (v.aggressiveness > 0.6 && rng() < 0.02) {
-            v.laneOffset += (rng() > 0.5 ? 1 : -1) * 0.5;
-            v.laneOffset = Math.max(-1.2, Math.min(1.2, v.laneOffset));
+        if (dx * dx + dz * dz < 16 && dx * dx + dz * dz > 0.1) {
+          const aheadDot = dx * Math.sin(v.heading) + dz * (-Math.cos(v.heading));
+          if (aheadDot > 0 && aheadDot < 3) {
+            desiredSpeed = Math.min(desiredSpeed, 0.2);
           }
         }
+      }
+
+      v.speed += (desiredSpeed - v.speed) * 0.08;
+      v.speed = Math.max(0, v.speed);
+      v.dist += v.speed * dt;
+
+      if (v.dist >= roadLen) {
+        const overshoot = v.dist - roadLen;
+        const endPt = v.forward ? roads[v.roadIdx].points[roads[v.roadIdx].points.length - 1] : roads[v.roadIdx].points[0];
+        let bestJunction = -1;
+        let bestJDist = Infinity;
+        for (let ji = 0; ji < junctions.length; ji++) {
+          const d2 = (junctions[ji].x - endPt.x) ** 2 + (junctions[ji].z - endPt.z) ** 2;
+          if (d2 < bestJDist) { bestJDist = d2; bestJunction = ji; }
+        }
+
+        if (bestJunction >= 0 && junctions[bestJunction].edges.length > 0) {
+          const junction = junctions[bestJunction];
+          const candidates = junction.edges.filter((e) => !(e.roadIdx === v.roadIdx && e.forward === !v.forward));
+          const edges = candidates.length > 0 ? candidates : junction.edges;
+
+          const weights: number[] = [];
+          for (const e of edges) {
+            const nextPos = interpolateRoad(roads[e.roadIdx], 1, e.forward);
+            const dh = angleDiff(v.heading, nextPos.heading);
+            weights.push(1.0 / (1.0 + Math.abs(dh) * 2));
+          }
+          const totalW = weights.reduce((a, b) => a + b, 0);
+          let r = rng() * totalW;
+          let chosen = edges[0];
+          for (let i = 0; i < edges.length; i++) {
+            r -= weights[i];
+            if (r <= 0) { chosen = edges[i]; break; }
+          }
+
+          v.roadIdx = chosen.roadIdx;
+          v.forward = chosen.forward;
+          v.dist = Math.min(overshoot, roadLengths[chosen.roadIdx] * 0.9);
+          const newRoadW = roads[chosen.roadIdx].width;
+          const newHalfW = newRoadW / 2;
+          const newNumLanes = Math.max(1, Math.round(newHalfW / 1.5));
+          const newLaneWidth = newHalfW / newNumLanes;
+          const currentLane = Math.min(
+            Math.floor(Math.abs(v.laneOffset) / newLaneWidth),
+            newNumLanes - 1
+          );
+          v.laneOffset = (v.forward ? 1 : -1) * (currentLane + 0.5) * newLaneWidth;
+        } else {
+          v.forward = !v.forward;
+          v.dist = Math.max(0, roadLen - overshoot);
+          v.speed *= 0.3;
+          v.laneOffset = -v.laneOffset;
+        }
+      }
+
+      if (v.dist < 0) {
+        v.forward = !v.forward;
+        v.dist = Math.abs(v.dist);
+        v.speed *= 0.3;
+        v.laneOffset = -v.laneOffset;
+      }
+
+      updateVehiclePosition(v, roads);
+    }
+
+    if (time > 5.0 && !accidentPoint) {
+      for (let i = 0; i < vehicles.length; i++) {
+        const a = vehicles[i];
+        if (a.state === "crashed" || a.flying) continue;
+        for (let j = i + 1; j < vehicles.length; j++) {
+          const b = vehicles[j];
+          if (b.state === "crashed" || b.flying) continue;
+
+          const dx = b.x - a.x;
+          const dz = b.z - a.z;
+          const maxReach = (a.length + b.length) * 0.5 + (a.width + b.width) * 0.5;
+          if (dx * dx + dz * dz > maxReach * maxReach) continue;
+
+          if (obbOverlap(a, b)) {
+            a.state = "crashed"; b.state = "crashed";
+            a.speed = 0; b.speed = 0;
+            accidentPoint = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
+            accidentTime = time;
+            accidentFrame = Math.floor(step / recordEvery);
+            break;
+          }
+        }
+        if (accidentPoint) break;
       }
     }
 
-    // Collision detection — ground vehicles only
-    // Warm-up: no crashes in the first 1.5 seconds so vehicles can spread out
-    if (!accidentPoint && time > 1.5) {
+    if (accidentPoint) {
+      for (const v of vehicles) {
+        if (v.state === "crashed" || v.flying) continue;
+        const d2 = (v.x - accidentPoint.x) ** 2 + (v.z - accidentPoint.z) ** 2;
+        if (d2 < 64) v.speed = Math.max(0, v.speed - 2.0 * dt);
+      }
+    }
+
+    if (step % recordEvery === 0) {
+      frames.push({
+        time: Math.round(time * 10) / 10,
+        vehicles: vehicles.map((v) => ({
+          id: v.id,
+          x: Math.round(v.x * 10) / 10,
+          z: Math.round(v.z * 10) / 10,
+          heading: Math.round(v.heading * 100) / 100,
+          speed: Math.round(v.speed * 10) / 10,
+          state: v.state,
+          flying: v.flying || undefined,
+          altitude: v.altitude || undefined,
+        })),
+      });
+      if (accidentPoint && time > accidentTime + 3) break;
+    }
+  }
+
+  if (!accidentPoint) return null;
+  return { frames, accidentPoint, accidentTime, accidentFrame, totalFrames: frames.length };
+}
+
+function getOBBCorners(v: VehicleSim): [number, number][] {
+  const sin = Math.sin(v.heading);
+  const cos = Math.cos(v.heading);
+  const hw = v.width / 2;
+  const hl = v.length / 2;
+  return [
+    [v.x + sin * hl + cos * hw, v.z - cos * hl + sin * hw],
+    [v.x + sin * hl - cos * hw, v.z - cos * hl - sin * hw],
+    [v.x - sin * hl - cos * hw, v.z + cos * hl - sin * hw],
+    [v.x - sin * hl + cos * hw, v.z + cos * hl + sin * hw],
+  ];
+}
+
+function projectOnAxis(corners: [number, number][], ax: number, az: number): [number, number] {
+  let min = Infinity, max = -Infinity;
+  for (const [cx, cz] of corners) {
+    const p = cx * ax + cz * az;
+    if (p < min) min = p;
+    if (p > max) max = p;
+  }
+  return [min, max];
+}
+
+function obbOverlap(a: VehicleSim, b: VehicleSim): boolean {
+  const cornersA = getOBBCorners(a);
+  const cornersB = getOBBCorners(b);
+  const axes: [number, number][] = [];
+  for (const corners of [cornersA, cornersB]) {
+    for (let i = 0; i < 2; i++) {
+      const dx = corners[i + 1][0] - corners[i][0];
+      const dz = corners[i + 1][1] - corners[i][1];
+      const len = Math.sqrt(dx * dx + dz * dz);
+      if (len < 0.0001) continue;
+      axes.push([-dz / len, dx / len]);
+    }
+  }
+  for (const [ax, az] of axes) {
+    const [minA, maxA] = projectOnAxis(cornersA, ax, az);
+    const [minB, maxB] = projectOnAxis(cornersB, ax, az);
+    if (maxA < minB || maxB < minA) return false;
+  }
+  return true;
+}
+
+function updateVehiclePosition(v: VehicleSim, roads: RoadSegment[]) {
+  const road = roads[v.roadIdx];
+  if (!road) return;
+  const pos = interpolateRoad(road, v.dist, v.forward);
+  v.heading = pos.heading;
+  const perpX = Math.cos(v.heading);
+  const perpZ = Math.sin(v.heading);
+  const maxOff = road.width * 0.42;
+  const clamped = Math.max(-maxOff, Math.min(maxOff, v.laneOffset));
+  v.x = pos.x + perpX * clamped;
+  v.z = pos.z + perpZ * clamped;
+}
+
+function angleDiff(from: number, to: number): number {
+  let d = to - from;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
+function runTileGridSimulation(
+  scene: SceneConfig, seed: number,
+  durationSeconds: number, fps: number, recordEvery: number
+): SimulationResult | null {
+  const rng = mulberry32(seed + 12345);
+  const dt = 1 / fps;
+  const totalSteps = Math.ceil(durationSeconds * fps);
+  const { gridSize, tileSize, tiles } = scene;
+
+  const grid: (Tile | null)[][] = Array.from({ length: gridSize }, () =>
+    Array.from({ length: gridSize }, () => null)
+  );
+  for (const t of tiles) {
+    if (t.row >= 0 && t.row < gridSize && t.col >= 0 && t.col < gridSize) {
+      grid[t.row][t.col] = t;
+    }
+  }
+
+  function isRoad(type: TileType) { return type.startsWith("road_"); }
+  function getTile(r: number, c: number) {
+    if (r < 0 || r >= gridSize || c < 0 || c >= gridSize) return null;
+    return grid[r][c];
+  }
+  function worldToGrid(x: number, z: number) {
+    return { row: Math.floor(z / tileSize + gridSize / 2), col: Math.floor(x / tileSize + gridSize / 2) };
+  }
+
+  interface SimpleSim {
+    id: string; x: number; z: number; heading: number;
+    speed: number; state: "driving" | "crashed";
+    length: number; flying: boolean; altitude: number;
+  }
+
+  const vehicles: SimpleSim[] = scene.vehicles.map((v) => ({
+    id: v.id, x: v.x, z: v.z, heading: v.heading, speed: v.speed,
+    state: "driving" as const,
+    length: v.type === "bus" ? 2.4 : v.type === "truck" ? 1.8 : 1.2,
+    flying: v.flying ?? false, altitude: v.altitude ?? 0,
+  }));
+
+  const frames: SimulationFrame[] = [];
+  let accidentPoint: { x: number; z: number } | null = null;
+  let accidentTime = 0;
+  let accidentFrame = 0;
+  const halfMap = (gridSize * tileSize) / 2;
+
+  for (let step = 0; step < totalSteps; step++) {
+    const time = step * dt;
+
+    for (const v of vehicles) {
+      if (v.state === "crashed") continue;
+      if (v.flying) {
+        v.heading += (rng() - 0.5) * 0.03;
+        v.x += Math.sin(v.heading) * v.speed * dt;
+        v.z -= Math.cos(v.heading) * v.speed * dt;
+        if (Math.abs(v.x) > halfMap * 0.8 || Math.abs(v.z) > halfMap * 0.8) v.heading += Math.PI * 0.03;
+        continue;
+      }
+      v.x += Math.sin(v.heading) * v.speed * dt;
+      v.z -= Math.cos(v.heading) * v.speed * dt;
+      const { row, col } = worldToGrid(v.x, v.z);
+      const tile = getTile(row, col);
+      if (!tile || !isRoad(tile.type)) {
+        v.heading += (rng() - 0.5) * 0.2;
+        v.speed *= 0.98;
+      }
+      if (Math.abs(v.x) > halfMap * 0.95 || Math.abs(v.z) > halfMap * 0.95) {
+        v.heading += Math.PI; v.speed *= 0.5;
+      }
+    }
+
+    if (!accidentPoint && time > 5.0) {
       for (let i = 0; i < vehicles.length; i++) {
-        if (vehicles[i].state === "crashed" || vehicles[i].flying) continue;
+        const a = vehicles[i];
+        if (a.state === "crashed" || a.flying) continue;
         for (let j = i + 1; j < vehicles.length; j++) {
-          if (vehicles[j].state === "crashed" || vehicles[j].flying) continue;
-          if (checkCollision(vehicles[i], vehicles[j])) {
-            vehicles[i].state = "crashed";
-            vehicles[j].state = "crashed";
-            vehicles[i].speed = 0;
-            vehicles[j].speed = 0;
-            accidentPoint = {
-              x: (vehicles[i].x + vehicles[j].x) / 2,
-              z: (vehicles[i].z + vehicles[j].z) / 2,
-            };
+          const b = vehicles[j];
+          if (b.state === "crashed" || b.flying) continue;
+          const dist = Math.sqrt((b.x - a.x) ** 2 + (b.z - a.z) ** 2);
+          if (dist < (a.length + b.length) * 0.25) {
+            if (a.speed < 0.2 && b.speed < 0.2) continue;
+            a.state = "crashed"; b.state = "crashed";
+            a.speed = 0; b.speed = 0;
+            accidentPoint = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
             accidentTime = time;
             accidentFrame = Math.floor(step / recordEvery);
           }
@@ -591,39 +624,27 @@ export function runSimulation(
       }
     }
 
-    // Record frame
     if (step % recordEvery === 0) {
       frames.push({
         time,
         vehicles: vehicles.map((v) => ({
           id: v.id,
-          x: Math.round(v.x * 100) / 100,
-          z: Math.round(v.z * 100) / 100,
+          x: Math.round(v.x * 10) / 10, z: Math.round(v.z * 10) / 10,
           heading: Math.round(v.heading * 100) / 100,
-          speed: Math.round(v.speed * 100) / 100,
+          speed: Math.round(v.speed * 10) / 10,
           state: v.state,
-          flying: v.flying || undefined,
-          altitude: v.altitude || undefined,
+          flying: v.flying || undefined, altitude: v.altitude || undefined,
         })),
       });
     }
   }
 
   if (!accidentPoint) return null;
-
-  return {
-    frames,
-    accidentPoint,
-    accidentTime,
-    accidentFrame,
-    totalFrames: frames.length,
-  };
+  return { frames, accidentPoint, accidentTime, accidentFrame, totalFrames: frames.length };
 }
 
 export function generateSimulation(
-  scene: SceneConfig,
-  baseSeed: number,
-  maxRetries: number = 15
+  scene: SceneConfig, baseSeed: number, maxRetries: number = 15
 ): { result: SimulationResult; seed: number } | null {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const simSeed = baseSeed + attempt * 7919;

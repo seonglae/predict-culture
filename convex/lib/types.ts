@@ -77,6 +77,10 @@ export interface BuildingFootprint {
   color: string;
 }
 
+export interface WaterPolygon {
+  polygon: { x: number; z: number }[];
+}
+
 export interface SceneConfig {
   gridSize: number;
   tileSize: number;
@@ -87,6 +91,7 @@ export interface SceneConfig {
   cityLabel?: string;
   roads?: RoadSegment[];
   buildings?: BuildingFootprint[];
+  waterPolygons?: WaterPolygon[];
   lat?: number;
   lon?: number;
 }
@@ -110,37 +115,19 @@ export const DIFFICULTY_CONFIG: Record<
   }
 > = {
   easy: { gridSize: 6, vehicleRange: [4, 6], aiToolCalls: 2, droneCount: 0, helicopterCount: 0 },
-  normal: { gridSize: 8, vehicleRange: [8, 12], aiToolCalls: 4, droneCount: 0, helicopterCount: 0 },
-  hard: { gridSize: 12, vehicleRange: [15, 20], aiToolCalls: 6, droneCount: 2, helicopterCount: 0 },
+  normal: { gridSize: 8, vehicleRange: [10, 14], aiToolCalls: 4, droneCount: 0, helicopterCount: 0 },
+  hard: { gridSize: 12, vehicleRange: [16, 22], aiToolCalls: 6, droneCount: 2, helicopterCount: 0 },
   hell: { gridSize: 16, vehicleRange: [25, 35], aiToolCalls: 8, droneCount: 4, helicopterCount: 2 },
 };
 
-// Japanese urban building colors — muted, sophisticated, concrete/glass
 export const BUILDING_COLORS = [
-  "#e8e4df", // warm concrete
-  "#d5cfc7", // aged concrete
-  "#c8c2b8", // stone gray
-  "#bfb8ae", // warm gray
-  "#d4cec5", // light concrete
-  "#eae6e1", // pale stone
-  "#ccc6bc", // taupe
-  "#e0dbd4", // cream concrete
-  "#b8b2a8", // dark warm gray
-  "#c4bfb5", // mushroom
+  "#e8e4df", "#d5cfc7", "#c8c2b8", "#bfb8ae", "#d4cec5",
+  "#eae6e1", "#ccc6bc", "#e0dbd4", "#b8b2a8", "#c4bfb5",
 ];
 
-// Realistic Japanese vehicle colors — mostly white/silver/black with some accents
 export const VEHICLE_COLORS = [
-  "#f5f5f5", // white (most common in Japan)
-  "#f5f5f5", // white
-  "#e8e8e8", // pearl white
-  "#c0c0c0", // silver
-  "#a8a8a8", // light gray
-  "#3a3a3a", // black
-  "#2c2c2c", // dark black
-  "#1a3a5c", // dark navy
-  "#8b1a1a", // dark red
-  "#2d4a3e", // forest green
+  "#f5f5f5", "#f5f5f5", "#e8e8e8", "#c0c0c0", "#a8a8a8",
+  "#3a3a3a", "#2c2c2c", "#1a3a5c", "#8b1a1a", "#2d4a3e",
 ];
 
 export const CITIES = [
