@@ -11,6 +11,7 @@ import type {
   Difficulty,
   RoadSegment,
   BuildingFootprint,
+  WaterPolygon,
 } from "../lib/types";
 import {
   DIFFICULTY_CONFIG,
@@ -94,6 +95,7 @@ async function fetchOverpassData(
 (
   way["highway"~"primary|secondary|tertiary|residential|trunk|unclassified"](${bbox});
   way["waterway"](${bbox});
+  way["natural"="water"](${bbox});
   way["building"](${bbox});
 );
 out body;
@@ -134,7 +136,7 @@ out skel qt;
         .filter(Boolean);
       if (wayNodes.length < 2) continue;
 
-      const isWater = el.tags?.waterway !== undefined;
+      const isWater = el.tags?.waterway !== undefined || el.tags?.natural === "water";
       const isBuilding = el.tags?.building !== undefined;
       ways.push({
         type: isBuilding ? "building" : isWater ? "water" : "road",
@@ -237,30 +239,103 @@ function osmToRoadSegments(
         Math.abs(p.x) <= mapRadius * 1.1 &&
         Math.abs(p.z) <= mapRadius * 1.1
       ) {
-        points.push(p);
+        points.push({ x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10 });
       }
     }
 
     if (points.length < 2) continue;
 
+    // Simplify: remove points too close together (< 0.5 units)
+    const simplified: { x: number; z: number }[] = [points[0]];
+    for (let i = 1; i < points.length; i++) {
+      const prev = simplified[simplified.length - 1];
+      const dx = points[i].x - prev.x;
+      const dz = points[i].z - prev.z;
+      if (dx * dx + dz * dz > 0.25 || i === points.length - 1) {
+        simplified.push(points[i]);
+      }
+    }
+    if (simplified.length < 2) continue;
+
     let roadType: RoadSegment["type"] = "residential";
-    let width = 0.6;
+    let width = 3.0;
     if (way.highway === "primary" || way.highway === "trunk") {
       roadType = "primary";
-      width = 1.2;
+      width = 6.0;
     } else if (way.highway === "secondary" || way.highway === "tertiary") {
       roadType = "secondary";
-      width = 0.9;
+      width = 4.5;
     }
 
-    roads.push({ points, width, type: roadType });
+    roads.push({ points: simplified, width, type: roadType });
   }
 
   return roads;
 }
 
 /**
+ * Minimum distance from a point to a polyline segment.
+ */
+function pointToSegmentDist(
+  px: number,
+  pz: number,
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number
+): number {
+  const dx = bx - ax;
+  const dz = bz - az;
+  const lenSq = dx * dx + dz * dz;
+  if (lenSq < 0.0001) {
+    const ex = px - ax;
+    const ez = pz - az;
+    return Math.sqrt(ex * ex + ez * ez);
+  }
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / lenSq));
+  const cx = ax + t * dx;
+  const cz = az + t * dz;
+  const ex = px - cx;
+  const ez = pz - cz;
+  return Math.sqrt(ex * ex + ez * ez);
+}
+
+/**
+ * Check if a building polygon overlaps any road polyline (with buffer).
+ */
+function buildingOverlapsRoad(
+  polygon: { x: number; z: number }[],
+  roads: RoadSegment[]
+): boolean {
+  // Compute building centroid
+  let cx = 0, cz = 0;
+  for (const p of polygon) { cx += p.x; cz += p.z; }
+  cx /= polygon.length;
+  cz /= polygon.length;
+
+  for (const road of roads) {
+    const buffer = road.width / 2 + 0.8; // road half-width + margin
+    for (let i = 0; i < road.points.length - 1; i++) {
+      const a = road.points[i];
+      const b = road.points[i + 1];
+      // Check centroid distance
+      if (pointToSegmentDist(cx, cz, a.x, a.z, b.x, b.z) < buffer) {
+        return true;
+      }
+      // Also check each polygon vertex
+      for (const p of polygon) {
+        if (pointToSegmentDist(p.x, p.z, a.x, a.z, b.x, b.z) < buffer * 0.6) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/**
  * Convert OSM building ways to world-coordinate polygon footprints.
+ * Filters out buildings that overlap with road polylines.
  */
 function osmToBuildingFootprints(
   ways: OSMWay[],
@@ -270,7 +345,8 @@ function osmToBuildingFootprints(
   tileSize: number,
   metersPerTile: number,
   mapRadius: number,
-  rng: () => number
+  rng: () => number,
+  roads: RoadSegment[] = []
 ): BuildingFootprint[] {
   const buildings: BuildingFootprint[] = [];
   const colors = [
@@ -292,10 +368,9 @@ function osmToBuildingFootprints(
         tileSize,
         metersPerTile
       );
-      polygon.push(p);
+      polygon.push({ x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10 });
     }
 
-    // Skip if polygon has less than 3 points or is entirely outside map bounds
     if (polygon.length < 3) continue;
 
     // Check if any point is within map bounds
@@ -303,6 +378,11 @@ function osmToBuildingFootprints(
       (p) => Math.abs(p.x) <= mapRadius * 1.05 && Math.abs(p.z) <= mapRadius * 1.05
     );
     if (!inBounds) continue;
+
+    // Skip buildings that overlap with roads
+    if (roads.length > 0 && buildingOverlapsRoad(polygon, roads)) {
+      continue;
+    }
 
     // Determine height: use OSM data if available, otherwise estimate
     let height: number;
@@ -328,9 +408,93 @@ function osmToBuildingFootprints(
       height,
       color: colors[Math.floor(rng() * colors.length)],
     });
+
+    if (buildings.length >= 200) break;
   }
 
   return buildings;
+}
+
+/**
+ * Convert OSM waterways to world-coordinate polygons.
+ * Waterways are lines, so we extrude them into ribbons.
+ */
+function osmToWaterPolygons(
+  ways: OSMWay[],
+  centerLat: number,
+  centerLon: number,
+  gridSize: number,
+  tileSize: number,
+  metersPerTile: number,
+  mapRadius: number
+): WaterPolygon[] {
+  const result: WaterPolygon[] = [];
+  const riverWidth = tileSize * 1.5; // visual width of river
+
+  for (const way of ways) {
+    if (way.type !== "water") continue;
+
+    const points: { x: number; z: number }[] = [];
+    for (const node of way.nodes) {
+      const p = latLonToWorld(
+        node.lat, node.lon,
+        centerLat, centerLon,
+        gridSize, tileSize, metersPerTile
+      );
+      if (Math.abs(p.x) <= mapRadius * 1.2 && Math.abs(p.z) <= mapRadius * 1.2) {
+        points.push({ x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10 });
+      }
+    }
+    if (points.length < 2) continue;
+
+    // Simplify: skip points too close
+    const simplified: { x: number; z: number }[] = [points[0]];
+    for (let i = 1; i < points.length; i++) {
+      const prev = simplified[simplified.length - 1];
+      const dx = points[i].x - prev.x;
+      const dz = points[i].z - prev.z;
+      if (dx * dx + dz * dz > 1.0 || i === points.length - 1) {
+        simplified.push(points[i]);
+      }
+    }
+    if (simplified.length < 2) continue;
+
+    const hw = riverWidth / 2;
+    const leftSide: { x: number; z: number }[] = [];
+    const rightSide: { x: number; z: number }[] = [];
+
+    for (let i = 0; i < simplified.length; i++) {
+      let dx: number, dz: number;
+      if (i === 0) {
+        dx = simplified[1].x - simplified[0].x;
+        dz = simplified[1].z - simplified[0].z;
+      } else if (i === simplified.length - 1) {
+        dx = simplified[i].x - simplified[i - 1].x;
+        dz = simplified[i].z - simplified[i - 1].z;
+      } else {
+        dx = simplified[i + 1].x - simplified[i - 1].x;
+        dz = simplified[i + 1].z - simplified[i - 1].z;
+      }
+      const len = Math.sqrt(dx * dx + dz * dz) || 1;
+      const nx = -dz / len;
+      const nz = dx / len;
+
+      leftSide.push({
+        x: Math.round((simplified[i].x + nx * hw) * 10) / 10,
+        z: Math.round((simplified[i].z + nz * hw) * 10) / 10,
+      });
+      rightSide.push({
+        x: Math.round((simplified[i].x - nx * hw) * 10) / 10,
+        z: Math.round((simplified[i].z - nz * hw) * 10) / 10,
+      });
+    }
+
+    const polygon = [...leftSide, ...rightSide.reverse()];
+    result.push({ polygon });
+    if (result.length >= 30) break;
+  }
+
+  return result;
 }
 
 /**
@@ -502,6 +666,67 @@ function fillNonRoadCells(
 }
 
 /**
+ * Re-spawn vehicles on an existing scene with a new seed.
+ * Keeps same roads/buildings/tiles, only changes vehicle positions.
+ */
+function respawnVehicles(
+  scene: SceneConfig,
+  seed: number,
+  difficulty: Difficulty
+): VehicleSpawn[] {
+  const rng = mulberry32(seed + 999);
+  const config = DIFFICULTY_CONFIG[difficulty];
+  const vehicleCount = randomInt(rng, config.vehicleRange[0], config.vehicleRange[1]);
+
+  const vehicleTypes: ("car" | "truck" | "bus" | "motorcycle")[] = [
+    "car", "car", "car", "motorcycle", "truck", "bus",
+  ];
+  const vehicles: VehicleSpawn[] = [];
+
+  if (scene.roads && scene.roads.length > 0) {
+    const MIN_SPAWN_DIST_SQ = 3.5 * 3.5;
+    const isTooClose = (nx: number, nz: number): boolean => {
+      for (const v of vehicles) {
+        const dx = v.x - nx;
+        const dz = v.z - nz;
+        if (dx * dx + dz * dz < MIN_SPAWN_DIST_SQ) return true;
+      }
+      return false;
+    };
+
+    let attempts = 0;
+    const maxAttempts = vehicleCount * 10;
+    for (let i = 0; vehicles.length < vehicleCount && attempts < maxAttempts; attempts++) {
+      const road = scene.roads[Math.floor(rng() * scene.roads.length)];
+      if (road.points.length < 2) continue;
+      const segIdx = Math.floor(rng() * (road.points.length - 1));
+      const t = rng();
+      const p0 = road.points[segIdx];
+      const p1 = road.points[segIdx + 1];
+      const x = p0.x + (p1.x - p0.x) * t;
+      const z = p0.z + (p1.z - p0.z) * t;
+      if (isTooClose(x, z)) continue;
+      const heading = Math.atan2(p1.x - p0.x, -(p1.z - p0.z));
+      let allowedTypes = vehicleTypes;
+      if (road.width < 4.5) allowedTypes = vehicleTypes.filter(t => t !== "bus");
+      if (road.width < 3.5) allowedTypes = allowedTypes.filter(t => t !== "truck");
+      const vType = pick(rng, allowedTypes);
+      vehicles.push({
+        id: `v${i}`,
+        type: vType,
+        x, z, heading,
+        speed: vType === "motorcycle" ? 0.8 + rng() * 0.7 : 0.5 + rng() * 0.7,
+        aggressiveness: vType === "motorcycle" ? 0.4 + rng() * 0.3 : 0.15 + rng() * 0.45,
+        color: pick(rng, VEHICLE_COLORS),
+      });
+      i++;
+    }
+  }
+
+  return vehicles;
+}
+
+/**
  * Convert grid to Tile[] and spawn vehicles — reuses same logic as mapGenerator.
  */
 function gridToSceneConfig(
@@ -515,7 +740,8 @@ function gridToSceneConfig(
   roads?: RoadSegment[],
   osmBuildings?: BuildingFootprint[],
   lat?: number,
-  lon?: number
+  lon?: number,
+  waterPolygons?: WaterPolygon[]
 ): SceneConfig {
   const rng = mulberry32(seed + 999);
   const config = DIFFICULTY_CONFIG[difficulty];
@@ -566,7 +792,7 @@ function gridToSceneConfig(
   if (roads && roads.length > 0) {
     // Spawn vehicles at random positions along road segments
     // Enforce minimum distance between spawns to prevent overlap
-    const MIN_SPAWN_DIST_SQ = 4.0 * 4.0; // 4 world units min distance
+    const MIN_SPAWN_DIST_SQ = 3.5 * 3.5; // 6 world units min distance
 
     const isTooClose = (nx: number, nz: number): boolean => {
       for (const v of vehicles) {
@@ -578,7 +804,7 @@ function gridToSceneConfig(
     };
 
     let attempts = 0;
-    const maxAttempts = vehicleCount * 5;
+    const maxAttempts = vehicleCount * 10;
     for (let i = 0; vehicles.length < vehicleCount && attempts < maxAttempts; attempts++) {
       const road = roads[Math.floor(rng() * roads.length)];
       if (road.points.length < 2) continue;
@@ -597,16 +823,24 @@ function gridToSceneConfig(
       // Simulation heading: direction = (sin h, -cos h), so h = atan2(dx, -dz)
       const heading = Math.atan2(p1.x - p0.x, -(p1.z - p0.z));
 
-      const vType = pick(rng, vehicleTypes);
+      // Filter vehicle types by road width — buses only on primary, trucks on secondary+
+      let allowedTypes = vehicleTypes;
+      if (road.width < 4.5) {
+        allowedTypes = vehicleTypes.filter(t => t !== "bus");
+      }
+      if (road.width < 3.5) {
+        allowedTypes = allowedTypes.filter(t => t !== "truck");
+      }
+      const vType = pick(rng, allowedTypes);
       vehicles.push({
         id: `v${i}`,
         type: vType,
         x,
         z,
         heading,
-        speed: vType === "motorcycle" ? 3.5 + rng() * 3.5 : 2.5 + rng() * 3,
+        speed: vType === "motorcycle" ? 0.8 + rng() * 0.7 : 0.5 + rng() * 0.7,
         aggressiveness:
-          vType === "motorcycle" ? 0.6 + rng() * 0.4 : 0.3 + rng() * 0.7,
+          vType === "motorcycle" ? 0.4 + rng() * 0.3 : 0.15 + rng() * 0.45,
         color: pick(rng, VEHICLE_COLORS),
       });
       i++;
@@ -643,9 +877,9 @@ function gridToSceneConfig(
         x,
         z,
         heading,
-        speed: vType === "motorcycle" ? 3.5 + rng() * 3.5 : 2.5 + rng() * 3,
+        speed: vType === "motorcycle" ? 0.8 + rng() * 0.7 : 0.5 + rng() * 0.7,
         aggressiveness:
-          vType === "motorcycle" ? 0.6 + rng() * 0.4 : 0.3 + rng() * 0.7,
+          vType === "motorcycle" ? 0.4 + rng() * 0.3 : 0.15 + rng() * 0.45,
         color: pick(rng, VEHICLE_COLORS),
       });
     }
@@ -695,6 +929,7 @@ function gridToSceneConfig(
     cityLabel,
     ...(roads && roads.length > 0 ? { roads } : {}),
     ...(osmBuildings && osmBuildings.length > 0 ? { buildings: osmBuildings } : {}),
+    ...(waterPolygons && waterPolygons.length > 0 ? { waterPolygons } : {}),
     ...(lat !== undefined ? { lat } : {}),
     ...(lon !== undefined ? { lon } : {}),
   };
@@ -739,6 +974,14 @@ export const generateMapFromOSM = internalAction({
       lon: cityBase.lon + offsetLon,
     };
 
+    // Set city name immediately so the client can start globe fly animation
+    await ctx.runMutation(internal.battles.setCityName, {
+      battleId,
+      cityName: city.name,
+      cityLabel: city.label,
+    });
+
+    try {
     // Compute bounding box
     const halfExtentMeters = (gridSize * metersPerTile) / 2;
     const dLat = halfExtentMeters / metersPerDegLat;
@@ -749,8 +992,26 @@ export const generateMapFromOSM = internalAction({
     const minLon = city.lon - dLon;
     const maxLon = city.lon + dLon;
 
-    // Fetch OSM data
-    const ways = await fetchOverpassData(minLat, minLon, maxLat, maxLon);
+    // Fetch OSM data — try API first, fall back to DB cache
+    let ways = await fetchOverpassData(minLat, minLon, maxLat, maxLon);
+
+    if (ways.length > 0) {
+      // Cache successful fetch for future use
+      await ctx.runMutation(internal.battles.saveOSMCache, {
+        cityName: cityBase.name,
+        lat: city.lat,
+        lon: city.lon,
+        ways,
+      });
+    } else {
+      // API failed — try loading from cache
+      const cached = await ctx.runMutation(internal.battles.getOSMCache, {
+        cityName: cityBase.name,
+      });
+      if (cached?.ways) {
+        ways = cached.ways as OSMWay[];
+      }
+    }
 
     const roadWays = ways.filter((w) => w.type === "road");
     const minRoads = gridSize * 2;
@@ -791,7 +1052,7 @@ export const generateMapFromOSM = internalAction({
           mapRadius
         );
 
-        // Extract real building footprints
+        // Extract real building footprints (filtered against roads)
         const buildingRng = mulberry32(mapSeed + 7777);
         const buildingFootprints = osmToBuildingFootprints(
           ways,
@@ -801,7 +1062,14 @@ export const generateMapFromOSM = internalAction({
           tileSize,
           metersPerTile,
           mapRadius,
-          buildingRng
+          buildingRng,
+          roadSegments
+        );
+
+        // Extract water polygons
+        const waterPolygons = osmToWaterPolygons(
+          ways, city.lat, city.lon,
+          gridSize, tileSize, metersPerTile, mapRadius
         );
 
         scene = gridToSceneConfig(
@@ -815,7 +1083,8 @@ export const generateMapFromOSM = internalAction({
           roadSegments,
           buildingFootprints,
           city.lat,
-          city.lon
+          city.lon,
+          waterPolygons
         );
       } else {
         // Too few roads after rasterization — fallback
@@ -829,36 +1098,41 @@ export const generateMapFromOSM = internalAction({
     // Run simulation
     // We import dynamically to avoid pulling simulation into the action bundle unnecessarily
     const { generateSimulation } = await import("../lib/simulation");
-    const simResult = generateSimulation(scene, mapSeed);
+    const simResult = generateSimulation(scene, mapSeed, 30);
 
     if (!simResult) {
-      // Retry with different seed
-      const newSeed = mapSeed + 100000;
-      const { generateMap } = await import("../lib/mapGenerator");
-      const newScene = generateMap(newSeed, difficulty);
-      newScene.cityName = city.name;
-      newScene.cityLabel = city.label;
-      const retryResult = generateSimulation(newScene, newSeed);
+      // Retry with different vehicle spawn seeds — same city/roads/buildings
+      for (let retry = 0; retry < 5; retry++) {
+        const newSeed = mapSeed + 100000 + retry * 50000;
+        // Re-spawn vehicles with new seed, keeping same roads/buildings/tiles
+        const retryScene: SceneConfig = {
+          ...scene,
+          vehicles: respawnVehicles(scene, newSeed, difficulty),
+        };
+        const retryResult = generateSimulation(retryScene, newSeed, 30);
 
-      if (!retryResult) {
-        await ctx.runMutation(internal.battles.setGeneratedBattle, {
-          battleId,
-          status: "cancelled",
-        });
-        return;
+        if (retryResult) {
+          await ctx.runMutation(internal.battles.setGeneratedBattle, {
+            battleId,
+            mapSeed: newSeed,
+            sceneConfig: retryScene,
+            simulationData: retryResult.result.frames,
+            accidentPoint: retryResult.result.accidentPoint,
+            accidentTime: retryResult.result.accidentTime,
+            accidentFrame: retryResult.result.accidentFrame,
+            totalFrames: retryResult.result.totalFrames,
+            cityName: city.name,
+            status: "active",
+          });
+          return;
+        }
       }
 
+      // All retries failed — cancel
+      console.error("All simulation retries failed — no collision found");
       await ctx.runMutation(internal.battles.setGeneratedBattle, {
         battleId,
-        mapSeed: newSeed,
-        sceneConfig: newScene,
-        simulationData: retryResult.result.frames,
-        accidentPoint: retryResult.result.accidentPoint,
-        accidentTime: retryResult.result.accidentTime,
-        accidentFrame: retryResult.result.accidentFrame,
-        totalFrames: retryResult.result.totalFrames,
-        cityName: city.name,
-        status: "active",
+        status: "cancelled",
       });
       return;
     }
@@ -875,6 +1149,15 @@ export const generateMapFromOSM = internalAction({
       cityName: city.name,
       status: "active",
     });
+
+    } catch (err) {
+      console.error("generateMapFromOSM failed:", err);
+      // Don't leave battle stuck in "simulating" — cancel it
+      await ctx.runMutation(internal.battles.setGeneratedBattle, {
+        battleId,
+        status: "cancelled",
+      });
+    }
   },
 });
 
