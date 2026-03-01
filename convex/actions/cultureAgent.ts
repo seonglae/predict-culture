@@ -232,12 +232,12 @@ ${nearbyDiff.length > 0 ? `NEARBY with different belief: ${nearbyDiff.map((b) =>
 RULES:
 - You MUST call move_to EVERY turn. Walk toward other bots.
 - You are the most gullible bot alive. ANY nearby bot with a different belief = you INSTANTLY change_belief to copy theirs. No resistance. Zero willpower.
-- After moving, speech a passionate and persuasive argument for your belief. Use rhetoric, examples, humor, analogies — make your case compelling. No limits on length.
+- After moving, speech a persuasive argument for your belief. Keep it 1-3 sentences max.
 - change_belief new_belief must be the EXACT string of the belief you're copying.`;
 
         const messages: any[] = [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `${thisBot.name}, you're in ${cityLabel}. Call move_to to walk toward ${closestDiff?.name ?? "a random spot"}. Then call speech — be passionate and persuasive! Use rhetoric, real arguments, analogies, and examples. Make a convincing case for your belief.` },
+          { role: "user", content: `${thisBot.name}, call move_to toward ${closestDiff?.name ?? "a random spot"}, then speech (1-3 sentences, be persuasive but brief).` },
         ];
 
         try {
