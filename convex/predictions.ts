@@ -16,7 +16,7 @@ export const submitPrediction = mutation({
     // Check player is in this battle
     if (!battle.playerIds.includes(playerId)) return null;
 
-    // Check for existing prediction (one per player per battle)
+    // Upsert — allow changing prediction
     const existing = await ctx.db
       .query("predictions")
       .withIndex("by_battle_player", (q) =>
@@ -24,7 +24,10 @@ export const submitPrediction = mutation({
       )
       .first();
 
-    if (existing) return null;
+    if (existing) {
+      await ctx.db.patch(existing._id, { coordinates, predictionTime });
+      return existing._id;
+    }
 
     return await ctx.db.insert("predictions", {
       battleId,

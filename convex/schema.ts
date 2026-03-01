@@ -88,4 +88,13 @@ export default defineSchema({
   })
     .index("by_player", ["playerId"])
     .index("by_battle", ["battleId"]),
+
+  osmCache: defineTable({
+    cityName: v.string(),
+    lat: v.number(),
+    lon: v.number(),
+    ways: v.any(),
+    createdAt: v.number(),
+  })
+    .index("by_city", ["cityName"]),
 });

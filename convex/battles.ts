@@ -33,8 +33,8 @@ export const createBattle = mutation({
       createdAt: Date.now(),
     });
 
-    // Schedule matchmaking timeout (5 seconds)
-    await ctx.scheduler.runAfter(5000, internal.battles.checkMatchmakingTimeout, {
+    // Schedule matchmaking timeout (2 seconds — short wait before adding AI)
+    await ctx.scheduler.runAfter(2000, internal.battles.checkMatchmakingTimeout, {
       battleId,
     });
 
@@ -136,6 +136,55 @@ export const generateAndStartBattle = internalMutation({
       mapSeed: battle.mapSeed,
       difficulty: battle.difficulty,
     });
+  },
+});
+
+/** Save OSM data to cache */
+export const saveOSMCache = internalMutation({
+  args: {
+    cityName: v.string(),
+    lat: v.number(),
+    lon: v.number(),
+    ways: v.any(),
+  },
+  handler: async (ctx, { cityName, lat, lon, ways }) => {
+    // Upsert — remove old cache for this city
+    const existing = await ctx.db
+      .query("osmCache")
+      .withIndex("by_city", (q) => q.eq("cityName", cityName))
+      .first();
+    if (existing) {
+      await ctx.db.replace(existing._id, { cityName, lat, lon, ways, createdAt: Date.now() });
+    } else {
+      await ctx.db.insert("osmCache", { cityName, lat, lon, ways, createdAt: Date.now() });
+    }
+  },
+});
+
+/** Load cached OSM data for a city */
+export const getOSMCache = internalMutation({
+  args: { cityName: v.string() },
+  handler: async (ctx, { cityName }) => {
+    return await ctx.db
+      .query("osmCache")
+      .withIndex("by_city", (q) => q.eq("cityName", cityName))
+      .first();
+  },
+});
+
+/** Set city name early so the client can start globe fly animation */
+export const setCityName = internalMutation({
+  args: {
+    battleId: v.id("battles"),
+    cityName: v.string(),
+    cityLabel: v.optional(v.string()),
+  },
+  handler: async (ctx, { battleId, cityName, cityLabel }) => {
+    const battle = await ctx.db.get(battleId);
+    if (!battle) return;
+    const patch: Record<string, string> = { cityName };
+    if (cityLabel) patch.cityLabel = cityLabel;
+    await ctx.db.patch(battleId, patch);
   },
 });
 
@@ -300,6 +349,16 @@ export const getBattle = query({
   args: { battleId: v.id("battles") },
   handler: async (ctx, { battleId }) => {
     return await ctx.db.get(battleId);
+  },
+});
+
+export const getBattleRatingChanges = query({
+  args: { battleId: v.id("battles") },
+  handler: async (ctx, { battleId }) => {
+    return await ctx.db
+      .query("ratingHistory")
+      .withIndex("by_battle", (q) => q.eq("battleId", battleId))
+      .collect();
   },
 });
 
