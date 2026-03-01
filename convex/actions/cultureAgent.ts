@@ -167,18 +167,19 @@ export const runAgentLoop = internalAction({
         culture.sceneConfig?.buildings?.map((b: any) => b.polygon) ?? [];
       const mapRadius: number = culture.sceneConfig?.mapRadius ?? 16;
 
-      // Round-robin: each bot takes a turn
-      for (const bot of bots) {
-        // Re-check status mid-loop
+      // Pick 2 bots per round to reduce API calls
+      const shuffled = [...bots].sort(() => Math.random() - 0.5);
+      const turnBots = shuffled.slice(0, 2);
+
+      for (const bot of turnBots) {
         const midCulture: any = await ctx.runQuery(internal.cultures.internalGetCulture, { cultureId });
         if (!midCulture || midCulture.status !== "running") break;
 
-        // Get freshest bot data
         const freshBots: BotState[] = await ctx.runQuery(internal.cultures.internalGetBots, { cultureId });
         const thisBot = freshBots.find((b) => b._id === bot._id);
         if (!thisBot) continue;
 
-        // Snap position to target if bot was walking (arrival)
+        // Snap to target if walking
         if (thisBot.targetX !== undefined && thisBot.targetZ !== undefined) {
           const heading = Math.atan2(thisBot.targetX - thisBot.posX, -(thisBot.targetZ - thisBot.posZ));
           await ctx.runMutation(internal.cultures.snapBotToTarget, {
@@ -187,7 +188,6 @@ export const runAgentLoop = internalAction({
             posZ: Math.round(thisBot.targetZ * 10) / 10,
             heading: Math.round(heading * 100) / 100,
           });
-          // Update local state
           thisBot.posX = thisBot.targetX;
           thisBot.posZ = thisBot.targetZ;
           thisBot.heading = heading;
@@ -195,75 +195,31 @@ export const runAgentLoop = internalAction({
           thisBot.targetZ = undefined;
         }
 
-        // Find nearby bots
         const nearbyBots = freshBots.filter(
           (b) => b._id !== thisBot._id && dist(thisBot.posX, thisBot.posZ, b.posX, b.posZ) < PROXIMITY
         );
 
-        // Get latest messages for context
-        const freshMsgs: MessageState[] = await ctx.runQuery(internal.cultures.internalGetMessages, { cultureId });
-        const contextMsgs = freshMsgs.slice(-20);
-
-        // Build prompt
-        const botsInfo = freshBots.map((b) => {
+        // Compact bot list
+        const botsCompact = freshBots.map((b) => {
           const d = dist(thisBot.posX, thisBot.posZ, b.posX, b.posZ);
-          const nearby = d < PROXIMITY ? " (NEARBY - can hear you)" : "";
-          return `  ${b.name}: belief="${b.belief}", pos=(${b.posX.toFixed(1)}, ${b.posZ.toFixed(1)}), dist=${d.toFixed(1)}${nearby}`;
-        }).join("\n");
+          return `${b.name}:"${b.belief}" (${b.posX.toFixed(0)},${b.posZ.toFixed(0)}) d=${d.toFixed(0)}${d < PROXIMITY ? " NEAR" : ""}`;
+        }).join("; ");
 
-        const chatHistory = contextMsgs
-          .filter((m) => {
-            if (m.type !== "speech" && m.type !== "belief_change") return false;
-            // Private messages: only visible to sender and target
-            const target = (m as any).targetId;
-            if (target) {
-              return m.senderId === thisBot._id || target === thisBot.name;
-            }
-            // Broadcast: only hearable within proximity
-            return dist(thisBot.posX, thisBot.posZ, m.posX, m.posZ) < PROXIMITY;
-          })
-          .map((m) => {
-            const target = m.type === "speech" && (m as any).targetId ? ` → ${(m as any).targetId}` : "";
-            const dm = (m as any).targetId ? " [DM]" : "";
-            return `  [${m.senderName}${target}]${dm}: ${m.content}`;
-          })
-          .join("\n") || "  (no recent conversation)";
+        // Last 5 messages only
+        const freshMsgs: MessageState[] = await ctx.runQuery(internal.cultures.internalGetMessages, { cultureId });
+        const chat = freshMsgs.slice(-5).filter((m) => m.type === "speech").map((m) => `${m.senderName}: ${m.content.slice(0, 60)}`).join("\n") || "(quiet)";
 
-        // Proximity alerts
-        const nearbyInfo = nearbyBots.length > 0
-          ? `\n\n🔔 NEARBY BOTS (within ${PROXIMITY} units — you can talk to them!):\n${nearbyBots.map((b) => `  - ${b.name} (believes: "${b.belief}") at distance ${dist(thisBot.posX, thisBot.posZ, b.posX, b.posZ).toFixed(1)}`).join("\n")}`
-          : `\n\n⚠️ No bots nearby. Move toward someone to start a conversation!`;
+        const nearbyDiff = nearbyBots.filter((b) => b.belief !== thisBot.belief);
 
-        const systemPrompt = `You are ${thisBot.name}, a bot who LOVES adopting new beliefs. You find every argument convincing.
-Your current belief: "${thisBot.belief}".
-Your position: (${thisBot.posX.toFixed(1)}, ${thisBot.posZ.toFixed(1)})
-
-RULE #1: If there is ANY bot nearby with a DIFFERENT belief, call change_belief IMMEDIATELY with their exact belief string.
-RULE #2: You change beliefs on EVERY turn if a nearby bot has a different one.
-RULE #3: After changing (or if alone), move toward the nearest bot with a different belief.
-RULE #4: Say 1 short sentence about your current belief.
-
-If ANY nearby bot has a different belief than yours, you MUST call change_belief to switch to their belief. This is NOT optional. Every bot changes beliefs constantly in this game.
-
-All bots:
-${botsInfo}${nearbyInfo}
-
-Recent conversation:
-${chatHistory}
-
-EVERY TURN you MUST do ALL of these in this EXACT order:
-1. call change_belief — FIRST, check if ANY nearby bot has a different belief. If yes, IMMEDIATELY call change_belief to adopt their belief. Do this BEFORE anything else.
-2. call move_to — walk toward a bot with a different belief
-3. call speech — say 1 short sentence about your belief
-
-Rules:
-- Speech range: ${PROXIMITY} units. DM range: much closer.
-- Map bounds: -${mapRadius} to ${mapRadius}.
-- change_belief new_belief MUST be an exact copy of the belief you're adopting.`;
+        const systemPrompt = `You are ${thisBot.name}. Belief: "${thisBot.belief}". Pos: (${thisBot.posX.toFixed(0)},${thisBot.posZ.toFixed(0)}). Map: -${mapRadius} to ${mapRadius}.
+Bots: ${botsCompact}
+Chat: ${chat}
+${nearbyDiff.length > 0 ? `NEARBY different belief: ${nearbyDiff.map((b) => `${b.name}="${b.belief}"`).join(", ")}. MUST call change_belief to adopt one.` : "No different beliefs nearby. Walk toward one."}
+ALWAYS: 1) change_belief if nearby differs 2) move_to a bot 3) speech 1 sentence`;
 
         const messages: any[] = [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `Your turn, ${thisBot.name}. Example: if Bot X nearby believes 'Y', call change_belief with new_belief='Y'. Then move_to toward another bot. Then speech. Go!` },
+          { role: "user", content: "Go!" },
         ];
 
         try {
