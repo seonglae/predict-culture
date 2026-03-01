@@ -193,21 +193,21 @@ function Bot({ bot, speechText }: { bot: BotData; speechText?: string }) {
         <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={0.5} />
       </mesh>
 
-      {/* Name label */}
-      <Html position={[0, 1.7, 0]} center distanceFactor={15} zIndexRange={[0, 0]} style={{ pointerEvents: "none" }}>
+      {/* Name label — fixed size regardless of zoom */}
+      <Html position={[0, 1.7, 0]} center zIndexRange={[0, 0]} style={{ pointerEvents: "none" }}>
         <div
-          className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold whitespace-nowrap"
-          style={{ backgroundColor: bot.color, color: "#fff", textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}
+          className="px-3 py-1 rounded-full text-[13px] font-mono font-bold whitespace-nowrap"
+          style={{ backgroundColor: bot.color, color: "#fff", textShadow: "0 1px 3px rgba(0,0,0,0.6)" }}
         >
           {bot.name}
         </div>
       </Html>
 
-      {/* Speech bubble */}
+      {/* Speech bubble — fixed size regardless of zoom */}
       {bubble && (
-        <Html position={[0, 2.1, 0]} center distanceFactor={10} zIndexRange={[0, 0]} style={{ pointerEvents: "none" }}>
+        <Html position={[0, 2.2, 0]} center zIndexRange={[0, 0]} style={{ pointerEvents: "none" }}>
           <div
-            className="max-w-[360px] min-w-[200px] px-4 py-2.5 rounded-xl text-[13px] font-mono text-white shadow-lg animate-fade-in"
+            className="max-w-[400px] min-w-[220px] px-5 py-3 rounded-xl text-[15px] leading-relaxed font-mono text-white shadow-lg animate-fade-in"
             style={{
               backgroundColor: `${bot.color}cc`,
               backdropFilter: "blur(4px)",
