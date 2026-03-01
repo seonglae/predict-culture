@@ -313,25 +313,31 @@ function ArenaContent() {
                   </div>
                 </motion.form>
 
-                {/* Quick pick — bot beliefs */}
-                <p className="text-[11px] font-mono text-white/25 mb-3 uppercase tracking-wider">or quick pick a belief</p>
-                <div className="flex flex-wrap gap-2 justify-center max-w-xl">
+                {/* Quick pick — belief cards */}
+                <p className="text-[11px] font-mono text-white/25 mb-3 uppercase tracking-wider">or pick a belief</p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl w-full mb-6">
                   {beliefs?.map((belief, i) => (
                     <motion.button
                       key={i}
-                      initial={{ y: 10, opacity: 0 }}
+                      initial={{ y: 20, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
-                      transition={{ delay: 0.15 + 0.05 * i }}
+                      transition={{ delay: 0.15 + 0.1 * i }}
                       onClick={() => handlePrediction(belief)}
-                      className="px-4 py-2 rounded-lg border border-white/10 bg-black/30 text-[12px] font-mono text-white/60 hover:bg-white/10 hover:border-white/25 hover:text-white/90 transition-all cursor-pointer"
+                      className="px-5 py-4 rounded-xl border border-white/15 bg-black/40 backdrop-blur-sm text-left hover:bg-white/10 hover:border-white/30 transition-all group cursor-pointer"
                     >
-                      &quot;{belief}&quot;
+                      <p className="text-[11px] font-mono text-white/40 mb-1 group-hover:text-white/60">
+                        I predict this will win
+                      </p>
+                      <p className="text-[14px] font-mono text-white/80 group-hover:text-white">
+                        &quot;{belief}&quot;
+                      </p>
                     </motion.button>
                   ))}
                 </div>
 
                 {/* Bot overview */}
-                <div className="mt-6 flex flex-wrap gap-2 justify-center max-w-lg">
+                <div className="flex flex-wrap gap-2 justify-center max-w-lg">
                   {bots.map((bot) => (
                     <span key={bot._id} className="px-2 py-1 rounded-full border border-white/10 text-[10px] font-mono" style={{ borderColor: bot.color + "30", color: bot.color + "99" }}>
                       {bot.name}: &quot;{bot.belief}&quot;
