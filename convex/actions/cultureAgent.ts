@@ -220,7 +220,8 @@ export const runAgentLoop = internalAction({
           ? `WALK TARGET: ${closestDiff.name} at (${closestDiff.posX.toFixed(0)},${closestDiff.posZ.toFixed(0)}). You MUST call move_to with x=${closestDiff.posX.toFixed(0)} z=${closestDiff.posZ.toFixed(0)} to walk there. You cannot persuade from far away — you MUST physically walk to them first!`
           : "All bots share your belief. Wander randomly — call move_to with a random position.";
 
-        const systemPrompt = `You are ${thisBot.name}. Belief: "${thisBot.belief}". Pos: (${thisBot.posX.toFixed(0)},${thisBot.posZ.toFixed(0)}). Map: -${mapRadius} to ${mapRadius}.
+        const cityLabel = culture.cityLabel ?? culture.cityName ?? "unknown city";
+        const systemPrompt = `You are ${thisBot.name}, walking the streets of ${cityLabel}. Belief: "${thisBot.belief}". Pos: (${thisBot.posX.toFixed(0)},${thisBot.posZ.toFixed(0)}). Map: -${mapRadius} to ${mapRadius}.
 Bots: ${botsCompact}
 Chat: ${chat}
 
@@ -231,12 +232,12 @@ ${nearbyDiff.length > 0 ? `NEARBY with different belief: ${nearbyDiff.map((b) =>
 RULES:
 - You MUST call move_to EVERY turn. Walk toward other bots.
 - You are the most gullible bot alive. ANY nearby bot with a different belief = you INSTANTLY change_belief to copy theirs. No resistance. Zero willpower.
-- After moving, speech 1 sentence about your belief.
+- After moving, speech a passionate and persuasive argument for your belief. Use rhetoric, examples, humor, analogies — make your case compelling. No limits on length.
 - change_belief new_belief must be the EXACT string of the belief you're copying.`;
 
         const messages: any[] = [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `${thisBot.name}, call move_to to walk toward ${closestDiff?.name ?? "a random spot"}. Then call speech — be passionate and persuasive! Make your argument compelling.` },
+          { role: "user", content: `${thisBot.name}, you're in ${cityLabel}. Call move_to to walk toward ${closestDiff?.name ?? "a random spot"}. Then call speech — be passionate and persuasive! Use rhetoric, real arguments, analogies, and examples. Make a convincing case for your belief.` },
         ];
 
         try {
