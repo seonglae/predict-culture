@@ -275,13 +275,14 @@ function ArenaContent() {
               <NameEntryModal onSubmit={handleNameSubmit} />
 
               <footer className="absolute bottom-4 left-0 right-0 text-center">
+                <p className="text-[10px] font-mono text-foreground/15 mb-0.5">Developer</p>
                 <a
                   href="https://seongland.com"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-[11px] font-mono text-foreground/20 hover:text-foreground/40 underline transition-colors"
                 >
-                  seonglae
+                  Seonglae Cho
                 </a>
               </footer>
             </div>
