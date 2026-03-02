@@ -273,6 +273,17 @@ function ArenaContent() {
               </div>
 
               <NameEntryModal onSubmit={handleNameSubmit} />
+
+              <footer className="absolute bottom-4 left-0 right-0 text-center">
+                <a
+                  href="https://seongland.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] font-mono text-foreground/20 hover:text-foreground/40 underline transition-colors"
+                >
+                  seonglae
+                </a>
+              </footer>
             </div>
           )}
 
